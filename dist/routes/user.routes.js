@@ -1,0 +1,15 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const user_controller_1 = require("../controllers/user.controller");
+const userRoutes = (0, express_1.Router)();
+userRoutes.get("/all", user_controller_1.getAllUser);
+userRoutes.post("/register", user_controller_1.saveUser);
+userRoutes.get("/find/:id", user_controller_1.getUserById);
+userRoutes.put("/update/:id", user_controller_1.updateUser);
+userRoutes.delete("/delete/:id", user_controller_1.deleteUser);
+userRoutes.get("/find-by-role/:role", user_controller_1.getAllUsersByRole);
+userRoutes.get("/find-by-email/:email", user_controller_1.getUserByEmail);
+userRoutes.get("/drivers/nearby", user_controller_1.getDriversNearby);
+userRoutes.patch("/toggle-availability/:id", user_controller_1.toggleAvailability);
+exports.default = userRoutes;

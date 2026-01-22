@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const rating_controller_1 = require("../controllers/rating.controller");
+const auth_middleware_1 = require("../middleware/auth.middleware");
+const ratingRoutes = (0, express_1.Router)();
+ratingRoutes.post("/save", auth_middleware_1.authenticateToken, rating_controller_1.saveRating);
+ratingRoutes.get("/driver/:driverId", auth_middleware_1.authenticateToken, rating_controller_1.getRatingsByDriverId);
+ratingRoutes.get("/trip/:tripId", auth_middleware_1.authenticateToken, rating_controller_1.getRatingByTripId);
+exports.default = ratingRoutes;

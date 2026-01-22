@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const trip_controller_1 = require("../controllers/trip.controller");
+const tripRoutes = (0, express_1.Router)();
+tripRoutes.get("/all", trip_controller_1.getAllTrips);
+tripRoutes.get("/:id", trip_controller_1.getTripById);
+tripRoutes.post("/save", trip_controller_1.saveTrip);
+tripRoutes.delete("/:id", trip_controller_1.deleteTrip);
+tripRoutes.put("/update/:id", trip_controller_1.updateTrip);
+tripRoutes.get("/get-by-driver/:driverId", trip_controller_1.getTripsByDriverId);
+tripRoutes.put("/status/:id", trip_controller_1.updateTripStatus);
+exports.default = tripRoutes;
