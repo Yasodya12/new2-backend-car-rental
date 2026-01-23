@@ -28,7 +28,7 @@ const tripSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Pending', 'Accepted', 'Processing', 'Completed', 'Cancelled', 'Rejected'],
+        enum: ['Pending', 'Accepted', 'Processing', 'Completed', 'Cancelled', 'Rejected', 'Paid'],
         default: "Pending"
     },
     distance: {

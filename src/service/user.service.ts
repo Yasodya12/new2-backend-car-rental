@@ -2,6 +2,7 @@ import { UserDTO } from "../dto/user.data";
 import User from "../model/user.model";
 import bcrypt from "bcryptjs";
 import { filterByDistance } from "../utils/distanceUtils";
+import { parseNIC } from "../utils/nicUtils";
 
 export const registerUser = async (user: UserDTO): Promise<UserDTO> => {
 
@@ -12,6 +13,15 @@ export const registerUser = async (user: UserDTO): Promise<UserDTO> => {
     // Set isApproved to false for drivers by default
     if (user.role === "driver") {
         user.isApproved = false;
+    }
+
+    // Parse NIC if provided to extract DOB and Gender
+    if (user.nic) {
+        const nicDetails = parseNIC(user.nic);
+        if (nicDetails) {
+            user.dateOfBirth = nicDetails.dob;
+            user.gender = nicDetails.gender;
+        }
     }
 
     console.log("register user function user profile image :", user.profileImage);
@@ -47,8 +57,8 @@ export const getUserByRole = async (role: string): Promise<UserDTO[]> => {
 }
 
 export const validateUser = async (user: UserDTO): Promise<string | null> => {
-    if (!user.name || !user.email || !user.password || !user.role) {
-        return "Please provide all required fields";
+    if (!user.name || !user.email || !user.password || !user.role || !user.nic || !user.contactNumber) {
+        return "Please provide all required fields (Name, Email, Password, Role, NIC, Contact Number)";
     }
     return null;
 }
