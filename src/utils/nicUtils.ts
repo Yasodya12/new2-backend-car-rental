@@ -5,7 +5,7 @@
  */
 
 export interface NICDetails {
-    dob: Date;
+    dob: string;
     gender: 'Male' | 'Female';
 }
 
@@ -41,9 +41,9 @@ export function parseNIC(nic: string): NICDetails | null {
     // Day of year validation (1-366)
     if (dayOfYear < 1 || dayOfYear > 366) return null;
 
-    // Calculate Date of Birth
-    const dob = new Date(year, 0); // Start at Jan 1st of that year
-    dob.setDate(dayOfYear); // Add the days
+    // Calculate Date of Birth using UTC to avoid timezone shifts
+    const dobDate = new Date(Date.UTC(year, 0, dayOfYear));
+    const dob = dobDate.toISOString().split('T')[0]; // Get YYYY-MM-DD
 
     return { dob, gender };
 }

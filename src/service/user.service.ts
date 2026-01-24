@@ -25,7 +25,29 @@ export const registerUser = async (user: UserDTO): Promise<UserDTO> => {
     }
 
     console.log("register user function user profile image :", user.profileImage);
-    return await User.create(user);
+    const newUser = await User.create(user);
+
+    // Create documents if provided during registration
+    if (user.role === "driver") {
+        if (user.licenseImage) {
+            await DriverDocument.create({
+                driverId: newUser._id,
+                type: "License",
+                documentUrl: user.licenseImage,
+                status: "Pending"
+            });
+        }
+        if (user.idImage) {
+            await DriverDocument.create({
+                driverId: newUser._id,
+                type: "ID",
+                documentUrl: user.idImage,
+                status: "Pending"
+            });
+        }
+    }
+
+    return newUser;
 }
 
 export const getAllUser = async (): Promise<UserDTO[]> => {
@@ -44,6 +66,16 @@ export const updateUser = async (id: string, user: UserDTO): Promise<UserDTO | n
     if (user.password) {
         user.password = bcrypt.hashSync(user.password, 10);
     }
+
+    // Parse NIC if provided to extract DOB and Gender
+    if (user.nic) {
+        const nicDetails = parseNIC(user.nic);
+        if (nicDetails) {
+            user.dateOfBirth = nicDetails.dob;
+            user.gender = nicDetails.gender;
+        }
+    }
+
     return User.findByIdAndUpdate(id, user, { new: true });
 };
 
@@ -56,9 +88,15 @@ export const getUserByRole = async (role: string): Promise<UserDTO[]> => {
     return User.find({ role });
 }
 
-export const validateUser = async (user: UserDTO): Promise<string | null> => {
-    if (!user.name || !user.email || !user.password || !user.role || !user.nic || !user.contactNumber) {
-        return "Please provide all required fields (Name, Email, Password, Role, NIC, Contact Number)";
+export const validateUser = async (user: UserDTO, isUpdate: boolean = false): Promise<string | null> => {
+    if (isUpdate) {
+        if (!user.name || !user.email || !user.role || !user.nic || !user.contactNumber) {
+            return "Please provide all required fields (Name, Email, Role, NIC, Contact Number)";
+        }
+    } else {
+        if (!user.name || !user.email || !user.password || !user.role || !user.nic || !user.contactNumber) {
+            return "Please provide all required fields (Name, Email, Password, Role, NIC, Contact Number)";
+        }
     }
     return null;
 }
@@ -163,8 +201,8 @@ export const approveDriver = async (id: string): Promise<UserDTO | null> => {
         throw new Error("Only drivers can be approved");
     }
 
-    // Check if the driver has mandatory verified documents: License, Insurance, ID
-    const mandatoryDocs = ["License", "Insurance", "ID"];
+    // Check if the driver has mandatory verified documents: License, ID
+    const mandatoryDocs = ["License", "ID"];
 
     console.log(`[APPROVE_DEBUG] Attempting to find docs for driverId: "${id}"`);
 
@@ -199,4 +237,33 @@ export const approveDriver = async (id: string): Promise<UserDTO | null> => {
     }
 
     return User.findByIdAndUpdate(id, { isApproved: true }, { new: true });
+}
+
+export const getDriverApprovals = async (): Promise<any[]> => {
+    // 1. Get all drivers who are not yet approved
+    const unapprovedDrivers = await User.find({ role: "driver", isApproved: false }).lean();
+
+    // 2. Get IDs of all drivers who have pending documents
+    const pendingDocs = await DriverDocument.find({ status: "Pending" }).distinct("driverId");
+
+    // 3. Merge sets to get all drivers needing attention (unapproved OR have pending docs)
+    const driverIdsSet = new Set([
+        ...unapprovedDrivers.map(d => d._id.toString()),
+        ...pendingDocs.map(id => id.toString())
+    ]);
+
+    const driverIds = Array.from(driverIdsSet);
+
+    // 4. Fetch full details and all documents for these specific drivers
+    const drivers = await User.find({ _id: { $in: driverIds } }).lean();
+
+    const results = await Promise.all(drivers.map(async (driver) => {
+        const docs = await DriverDocument.find({ driverId: driver._id }).lean();
+        return {
+            ...driver,
+            documents: docs
+        };
+    }));
+
+    return results;
 }

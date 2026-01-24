@@ -9,7 +9,7 @@ import { createNotification } from "../service/notification.service";
 export const saveUser = async (req: Request, res: Response) => {
     try {
         const userData = req.body as UserDTO;
-        const validationError = await userService.validateUser(userData);
+        const validationError = await userService.validateUser(userData, false);
         if (validationError) {
             return res.status(400).send({ error: validationError });
         }
@@ -39,7 +39,7 @@ export const updateUser = async (req: Request, res: Response) => {
     try {
         const id = req.params.id;
         const user = req.body;
-        const validationError = await userService.validateUser(user);
+        const validationError = await userService.validateUser(user, true);
         if (validationError) {
             return res.status(400).send({ error: validationError });
         }
@@ -107,6 +107,15 @@ export const getAllUsersByRole = async (req: AuthRequest, res: Response) => {
         return res.status(200).send(users);
     } catch (error: any) {
         return res.status(400).send({ error: error.message || "Approval failed" });
+    }
+}
+
+export const getDriverApprovals = async (req: AuthRequest, res: Response) => {
+    try {
+        const approvals = await userService.getDriverApprovals();
+        return res.status(200).send(approvals);
+    } catch (error: any) {
+        return res.status(400).send({ error: error.message || "Failed to fetch driver approvals" });
     }
 }
 

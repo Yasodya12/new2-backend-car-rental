@@ -6,7 +6,7 @@ export interface UserDTO {
     role: string
     nic?: string
     contactNumber?: string
-    dateOfBirth?: Date | string | null
+    dateOfBirth?: string | null
     gender?: 'Male' | 'Female' | null
     profileImage?: string | null | undefined
     averageRating?: number
@@ -18,6 +18,8 @@ export interface UserDTO {
     }[]
     isAvailable?: boolean;
     isApproved?: boolean;
+    licenseImage?: string | null;
+    idImage?: string | null;
     location?: {
         lat?: number | null
         lng?: number | null
