@@ -47,7 +47,9 @@ export const getDashboardData = async () => {
         totalRevenue,
         totalPromoDiscount,
         topDrivers,
-        tripDistribution: tripDistribution.map(d => ({ type: d._id || 'Standard', count: d.count }))
+        tripDistribution: tripDistribution
+            .filter(d => d._id) // Filter out null or missing tripTypes
+            .map(d => ({ type: d._id, count: d.count }))
     };
 };
 

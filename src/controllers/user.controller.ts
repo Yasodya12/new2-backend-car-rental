@@ -102,8 +102,10 @@ export const getAllUsersByRole = async (req: AuthRequest, res: Response) => {
 
         // Security: Only admins can include unapproved users
         const includeUnapproved = req.query.includeUnapproved === 'true' && userRole === 'admin';
+        const filter = req.query.filter as string | undefined;
+        const search = req.query.search as string | undefined;
 
-        const users = await userService.getAllUsersByRole(role, includeUnapproved);
+        const users = await userService.getAllUsersByRole(role, includeUnapproved, filter, search);
         return res.status(200).send(users);
     } catch (error: any) {
         return res.status(400).send({ error: error.message || "Approval failed" });

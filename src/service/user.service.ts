@@ -101,11 +101,65 @@ export const validateUser = async (user: UserDTO, isUpdate: boolean = false): Pr
     return null;
 }
 
-export const getAllUsersByRole = async (role: string, includeUnapproved: boolean = false): Promise<UserDTO[]> => {
-    // For drivers, only return approved ones unless explicitly requested
-    if (role === "driver" && !includeUnapproved) {
-        return User.find({ role, isApproved: true });
+export const getAllUsersByRole = async (role: string, includeUnapproved: boolean = false, adminFilter?: string, search?: string): Promise<UserDTO[]> => {
+    // For drivers, we handle special admin filtering and search
+    if (role === "driver") {
+        let query: any = { role };
+
+        if (!includeUnapproved) {
+            query.isApproved = true;
+        }
+
+        // Apply Search
+        if (search) {
+            const searchRegex = { $regex: search, $options: 'i' };
+            const orConditions: any[] = [
+                { name: searchRegex },
+                { nic: searchRegex },
+                { contactNumber: searchRegex },
+                { "location.address": searchRegex }
+            ];
+
+            // Check if search term is a valid MongoDB ObjectId
+            const mongoose = (await import("mongoose")).default;
+            if (mongoose.Types.ObjectId.isValid(search)) {
+                orConditions.push({ _id: search });
+            } else if (search.length >= 4) {
+                // Also try partial ID search if it looks like part of an ID
+                orConditions.push({ $expr: { $regexMatch: { input: { $toString: "$_id" }, regex: search, options: "i" } } });
+            }
+
+            query.$or = orConditions;
+        }
+
+        // Apply Admin Filter
+        if (adminFilter) {
+            switch (adminFilter) {
+                case 'approved':
+                    query.isApproved = true;
+                    break;
+                case 'pending':
+                    query.isApproved = false;
+                    break;
+                case 'available':
+                    query.isAvailable = true;
+                    query.isApproved = true; // Safety: only show approved ones
+                    break;
+                case 'rejected_docs':
+                    // Find drivers who have at least one rejected document
+                    const DriverDocument = (await import("../model/driverDocument.model")).default;
+                    const driversWithRejectedDocs = await DriverDocument.find({ status: "Rejected" }).distinct("driverId");
+                    query._id = { ...query._id, $in: driversWithRejectedDocs };
+                    break;
+                case 'unavailable':
+                    query.isAvailable = false;
+                    break;
+            }
+        }
+
+        return User.find(query);
     }
+
     return User.find({ role });
 }
 
