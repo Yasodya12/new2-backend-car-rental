@@ -35,21 +35,46 @@ export const saveUser = async (req: Request, res: Response) => {
     }
 }
 
-export const updateUser = async (req: Request, res: Response) => {
+// Update own profile
+export const updateProfile = async (req: AuthRequest, res: Response) => {
     try {
-        const id = req.params.id;
-        const user = req.body;
-        const validationError = await userService.validateUser(user, true);
-        if (validationError) {
-            return res.status(400).send({ error: validationError });
+        const id = req.user?.id;
+        if (!id) {
+            return res.status(401).send({ error: "Unauthorized" });
         }
+
+        const user = req.body;
+
+        // Validate required fields for profile completion
+        if (req.path.includes('profile')) {
+            if (!user.nic || !user.contactNumber) {
+                return res.status(400).send({ error: "NIC and Contact Number are required" });
+            }
+        }
+
         const updatedUser = await userService.updateUser(id, user);
         if (!updatedUser) {
             return res.status(404).send({ error: "User not found" });
         }
         return res.status(200).send(updatedUser);
     } catch (error: any) {
-        return res.status(400).send({ error: error.message || "Approval failed" });
+        return res.status(400).send({ error: error.message || "Update failed" });
+    }
+}
+
+export const updateUser = async (req: Request, res: Response) => {
+    try {
+        const id = req.params.id;
+        const user = req.body;
+        // Skip validation for simple updates or handle inside service
+
+        const updatedUser = await userService.updateUser(id, user);
+        if (!updatedUser) {
+            return res.status(404).send({ error: "User not found" });
+        }
+        return res.status(200).send(updatedUser);
+    } catch (error: any) {
+        return res.status(400).send({ error: error.message || "Update failed" });
     }
 }
 
@@ -62,7 +87,7 @@ export const deleteUser = async (req: Request, res: Response) => {
         }
         return res.status(200).send(deletedUser);
     } catch (error: any) {
-        return res.status(400).send({ error: error.message || "Approval failed" });
+        return res.status(400).send({ error: error.message || "Delete failed" });
     }
 }
 

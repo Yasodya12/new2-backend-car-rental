@@ -28,6 +28,7 @@ const tripSchema = new mongoose_1.default.Schema({
     },
     status: {
         type: String,
+        enum: ['Pending', 'Accepted', 'Processing', 'Completed', 'Cancelled', 'Rejected', 'Paid'],
         default: "Pending"
     },
     distance: {
@@ -44,6 +45,23 @@ const tripSchema = new mongoose_1.default.Schema({
         enum: ['Instant', 'Scheduled'],
         default: 'Scheduled'
     },
+    promoCode: {
+        type: String
+    },
+    discountAmount: {
+        type: Number,
+        default: 0
+    },
+    startLat: { type: Number },
+    startLng: { type: Number },
+    endLat: { type: Number },
+    endLng: { type: Number },
+    currentLat: { type: Number },
+    currentLng: { type: Number },
+    currentProgress: { type: Number, default: 0 },
+    rating: { type: Number, min: 0, max: 5 },
+    rejectionReason: { type: String },
+    rejectedDrivers: [{ type: mongoose_1.default.Schema.Types.ObjectId, ref: "User" }],
     createdAt: {
         type: Date,
         default: Date.now

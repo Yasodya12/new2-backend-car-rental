@@ -4,6 +4,7 @@ import {
     saveUser,
     getUserById,
     updateUser,
+    updateProfile,
     deleteUser,
     getAllUsersByRole, getUserByEmail, getDriversNearby, toggleAvailability, approveDriver, saveAdmin, getDriverApprovals
 } from "../controllers/user.controller";
@@ -16,6 +17,7 @@ userRoutes.post("/register", saveUser)
 userRoutes.post("/admin-create", authenticateToken, authorizeRole('admin'), saveAdmin)
 userRoutes.get("/find/:id", authenticateToken, authorizeRole('admin'), getUserById)
 userRoutes.put("/update/:id", authenticateToken, updateUser)
+userRoutes.put("/profile", authenticateToken, updateProfile)
 userRoutes.delete("/delete/:id", authenticateToken, authorizeRole('admin'), deleteUser)
 userRoutes.get("/driver-approvals", authenticateToken, authorizeRole('admin'), getDriverApprovals)
 userRoutes.get("/find-by-role/:role", authenticateToken, authorizeRole('admin', 'customer', 'driver'), getAllUsersByRole)

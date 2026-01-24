@@ -90,12 +90,14 @@ export const getUserByRole = async (role: string): Promise<UserDTO[]> => {
 
 export const validateUser = async (user: UserDTO, isUpdate: boolean = false): Promise<string | null> => {
     if (isUpdate) {
-        if (!user.name || !user.email || !user.role || !user.nic || !user.contactNumber) {
-            return "Please provide all required fields (Name, Email, Role, NIC, Contact Number)";
+        if (!user.name || !user.email || !user.role) {
+            return "Please provide all required fields (Name, Email, Role)";
         }
     } else {
-        if (!user.name || !user.email || !user.password || !user.role || !user.nic || !user.contactNumber) {
-            return "Please provide all required fields (Name, Email, Password, Role, NIC, Contact Number)";
+        // For standard registration (not Google), password is required
+        // But since we use this DTO for Google too, we loosen the check here or handle it in specific controllers
+        if (!user.name || !user.email || !user.role) {
+            return "Please provide all required fields (Name, Email, Role)";
         }
     }
     return null;

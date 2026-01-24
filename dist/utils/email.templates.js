@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.tripCompletedTemplate = exports.tripCancelledTemplate = exports.tripAcceptedTemplate = exports.otpEmailTemplate = exports.loginNotificationTemplate = exports.adminNotificationTemplate = exports.passwordResetTemplate = exports.tripAssignmentTemplate = exports.bookingConfirmationTemplate = exports.baseTemplate = void 0;
+exports.adminCredentialsTemplate = exports.paymentReceiptTemplate = exports.tripCompletedTemplate = exports.tripCancelledTemplate = exports.tripAcceptedTemplate = exports.otpEmailTemplate = exports.loginNotificationTemplate = exports.adminNotificationTemplate = exports.passwordResetTemplate = exports.tripAssignmentTemplate = exports.bookingConfirmationTemplate = exports.baseTemplate = void 0;
 const baseTemplate = (content, title = "Transport Service") => `
 <!DOCTYPE html>
 <html lang="en">
@@ -299,9 +299,9 @@ const tripAcceptedTemplate = (customerName, tripId, driverName, vehicleBrand, ve
 exports.tripAcceptedTemplate = tripAcceptedTemplate;
 const tripCancelledTemplate = (customerName, tripId, startLocation, endLocation, date) => {
     const content = `
-        <h2 class="text-2xl text-red-600 mb-6 mt-0">❌ Trip Cancelled</h2>
+        <h2 class="text-2xl text-red-600 mb-6 mt-0">❌ Trip Cancelled / Declined</h2>
         <p class="mb-4">Hi <span class="font-semibold">${customerName}</span>,</p>
-        <p class="mb-6">We regret to inform you that your trip has been cancelled.</p>
+        <p class="mb-6">We regret to inform you that your trip has been cancelled or declined by the driver.</p>
         
         <div class="bg-gray-50 border-l-4 border-red-500 rounded-lg p-6 mb-6">
             <h3 class="text-lg font-semibold mb-4 text-gray-800">Trip Details</h3>
@@ -329,9 +329,9 @@ const tripCancelledTemplate = (customerName, tripId, startLocation, endLocation,
              <p class="m-0 text-red-700">If this was a mistake or you need to re-book, please visit our app immediately.</p>
         </div>
         
-        <p class="mb-4">We apologize for any inconvenience caused.</p>
+        <p class="mb-4">We apologize for any inconvenience caused. You can create a new trip request at any time.</p>
     `;
-    return (0, exports.baseTemplate)(content, "Trip Cancelled");
+    return (0, exports.baseTemplate)(content, "Trip Cancelled / Declined");
 };
 exports.tripCancelledTemplate = tripCancelledTemplate;
 const tripCompletedTemplate = (customerName, tripId, price, startLocation, endLocation, date, distance) => {
@@ -387,3 +387,60 @@ const tripCompletedTemplate = (customerName, tripId, price, startLocation, endLo
     return (0, exports.baseTemplate)(content, "Trip Bill");
 };
 exports.tripCompletedTemplate = tripCompletedTemplate;
+const paymentReceiptTemplate = (customerName, tripId, amount, date, method) => {
+    const content = `
+        <h2 class="text-2xl text-primary mb-6 mt-0">🧾 Payment Receipt</h2>
+        <p class="mb-4">Hi <span class="font-semibold">${customerName}</span>,</p>
+        <p class="mb-6">Thank you for your payment. Here is your official receipt.</p>
+        
+        <div class="bg-white border-2 border-dashed border-green-300 rounded-lg p-6 mb-6">
+            <div class="text-center border-b border-gray-200 pb-4 mb-4">
+                <p class="text-gray-500 text-sm uppercase tracking-wider mb-1">Amount Paid</p>
+                <h3 class="text-3xl font-bold text-gray-800 m-0 text-green-600">LKR ${amount.toFixed(2)}</h3>
+                <p class="text-gray-500 text-sm font-semibold mt-2">Paid via ${method}</p>
+            </div>
+
+            <div class="space-y-3">
+                 <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span class="font-semibold text-gray-600">Receipt ID</span>
+                    <span class="font-mono text-gray-800">#${tripId.slice(-6).toUpperCase()}</span>
+                </div>
+                <div class="flex justify-between items-center py-2 border-b border-gray-100">
+                    <span class="font-semibold text-gray-600">Trip ID</span>
+                    <span class="font-mono text-gray-800">${tripId}</span>
+                </div>
+                <div class="flex justify-between items-center py-2">
+                    <span class="font-semibold text-gray-600">Date</span>
+                    <span class="text-gray-800">${date}</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <p class="m-0 text-center text-green-800 font-semibold">Payment Successfully Received within 24 Hours ✅</p>
+        </div>
+        
+        <p class="text-center text-gray-500 text-sm">Thank you for choosing our service!</p>
+    `;
+    return (0, exports.baseTemplate)(content, "Payment Receipt");
+};
+exports.paymentReceiptTemplate = paymentReceiptTemplate;
+const adminCredentialsTemplate = (name, email, password) => {
+    const content = `
+        <h2 style="color: #1a56db; margin-top: 0;">Welcome to the Administrative Team! 🏛️</h2>
+        <p>Hello <strong>${name}</strong>,</p>
+        <p>An administrator account has been created for you in the Transport Management System. Below are your login credentials:</p>
+        
+        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1a56db;">
+            <p style="margin: 5px 0;"><strong>Login URL:</strong> <a href="http://localhost:5173/login">http://localhost:5173/login</a></p>
+            <p style="margin: 5px 0;"><strong>Email:</strong> ${email}</p>
+            <p style="margin: 5px 0;"><strong>Temporary Password:</strong> <code style="background: #e5e7eb; padding: 2px 6px; border-radius: 4px; font-weight: bold; color: #d946ef;">${password}</code></p>
+        </div>
+        
+        <p style="color: #ef4444; font-size: 0.9em;"><strong>Important:</strong> Please log in and change your password immediately from your profile page for security reasons.</p>
+        
+        <p>If you have any questions, please contact the system administrator.</p>
+    `;
+    return (0, exports.baseTemplate)(content, "New Administrator Credentials");
+};
+exports.adminCredentialsTemplate = adminCredentialsTemplate;

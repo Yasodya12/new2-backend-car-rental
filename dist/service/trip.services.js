@@ -45,30 +45,45 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateTripStatus = exports.validateTrip = exports.updateTrip = exports.deleteTrip = exports.getTripById = exports.saveTrip = exports.getAllTrips = exports.getTripsByDriverId = void 0;
+exports.updateTripLocation = exports.updateTripStatus = exports.validateTrip = exports.updateTrip = exports.deleteTrip = exports.getTripById = exports.saveTrip = exports.getAllTrips = exports.getTripsByDriverId = void 0;
 const trip_model_1 = __importDefault(require("../model/trip.model"));
+const vehicle_model_1 = __importDefault(require("../model/vehicle.model"));
 const email_1 = require("../utils/email");
 const email_templates_1 = require("../utils/email.templates");
+const pricingUtils_1 = require("../utils/pricingUtils");
 const getTripsByDriverId = (driverId) => __awaiter(void 0, void 0, void 0, function* () {
     console.log("driverId", driverId);
     const trips = yield trip_model_1.default.find({ driverId })
         .populate("driverId", "_id name email averageRating totalRatings experience provincesVisited")
-        .populate("vehicleId", "_id brand model name")
+        .populate("vehicleId", "_id brand model name category pricePerKm")
         .populate("customerId", "_id name email")
         .lean();
     return trips;
 });
 exports.getTripsByDriverId = getTripsByDriverId;
-const getAllTrips = () => __awaiter(void 0, void 0, void 0, function* () {
-    const trips = yield trip_model_1.default.find()
+const getAllTrips = (...args_1) => __awaiter(void 0, [...args_1], void 0, function* (filter = {}) {
+    const trips = yield trip_model_1.default.find(filter)
         .populate("driverId", "_id name email averageRating totalRatings experience provincesVisited")
-        .populate("vehicleId", "_id brand model name")
+        .populate("vehicleId", "_id brand model name category pricePerKm")
         .populate("customerId", "_id name email")
         .lean();
     return trips;
 });
 exports.getAllTrips = getAllTrips;
 const saveTrip = (trip) => __awaiter(void 0, void 0, void 0, function* () {
+    // Auto-calculate price based on vehicle category and distance
+    if (trip.vehicleId && trip.distance && !trip.price) {
+        // Extract numeric distance (handle "50 km" or "50")
+        const distanceStr = trip.distance.toString().replace(/[^\d.]/g, '');
+        const distanceKm = parseFloat(distanceStr);
+        if (!isNaN(distanceKm) && distanceKm > 0) {
+            // Fetch vehicle to get category
+            const vehicle = yield vehicle_model_1.default.findById(trip.vehicleId);
+            if (vehicle && vehicle.category) {
+                trip.price = (0, pricingUtils_1.calculateTripPrice)(distanceKm, vehicle.category);
+            }
+        }
+    }
     return trip_model_1.default.create(trip);
 });
 exports.saveTrip = saveTrip;
@@ -103,13 +118,13 @@ const validateTrip = (trip) => __awaiter(void 0, void 0, void 0, function* () {
     // Find conflicting trips
     const conflictQuery = {
         driverId: driverId,
-        status: { $nin: ["Completed", "Cancelled", "Rejected"] }
+        status: { $nin: ["Completed", "Cancelled", "Rejected", "Pending"] }
     };
     if (queryEndDate) {
         // Extended Trip requesting...
         const conflictConditions = [
             {
-                // Existing trip overlaps with requested window
+                // Existing Extended Trips that overlap (Accepted or Processing)
                 date: { $lt: queryEndDate },
                 endDate: { $gt: queryDate }
             }
@@ -126,13 +141,21 @@ const validateTrip = (trip) => __awaiter(void 0, void 0, void 0, function* () {
     }
     else {
         // Quick Ride requesting...
-        conflictQuery.$or = [
-            { status: "Processing" },
+        const conflictConditions = [
+            // Active Quick Rides block immediately
             {
-                date: { $lte: queryDate },
-                endDate: { $gte: queryDate }
+                status: "Processing",
+                endDate: { $exists: false }
             }
         ];
+        // Accepted or Processing Extended Trips that cover the Quick Ride time
+        const now = new Date();
+        conflictConditions.push({
+            date: { $lte: now },
+            endDate: { $gte: now },
+            status: { $in: ["Accepted", "Processing"] }
+        });
+        conflictQuery.$or = conflictConditions;
     }
     const conflictingTrip = yield trip_model_1.default.findOne(conflictQuery);
     if (conflictingTrip) {
@@ -142,7 +165,7 @@ const validateTrip = (trip) => __awaiter(void 0, void 0, void 0, function* () {
     const vehicleId = trip.vehicleId;
     const vehicleConflictQuery = {
         vehicleId: vehicleId,
-        status: { $nin: ["Completed", "Cancelled", "Rejected"] }
+        status: { $nin: ["Completed", "Cancelled", "Rejected", "Pending"] }
     };
     if (queryEndDate) {
         // Extended Trip requesting...
@@ -158,10 +181,21 @@ const validateTrip = (trip) => __awaiter(void 0, void 0, void 0, function* () {
     }
     else {
         // Quick Ride
-        vehicleConflictQuery.$or = [
-            { status: "Processing" },
-            { date: { $lte: queryDate }, endDate: { $gte: queryDate } }
+        const conflictConditions = [
+            // Active Quick Rides block immediately
+            {
+                status: "Processing",
+                endDate: { $exists: false }
+            }
         ];
+        // Accepted or Processing Extended Trips that cover the Quick Ride time
+        const now = new Date();
+        conflictConditions.push({
+            date: { $lte: now },
+            endDate: { $gte: now },
+            status: { $in: ["Accepted", "Processing"] }
+        });
+        vehicleConflictQuery.$or = conflictConditions;
     }
     const conflictingVehicleTrip = yield trip_model_1.default.findOne(vehicleConflictQuery);
     if (conflictingVehicleTrip) {
@@ -181,7 +215,16 @@ const updateTripStatus = (id, data) => __awaiter(void 0, void 0, void 0, functio
         const customer = updatedTrip.customerId;
         const customerEmail = customer.email;
         const customerName = customer.name;
-        // Handle Trip Accepted (Processing)
+        // Handle Trip Accepted (for Extended Trips or confirmed bookings)
+        if (data.status === "Accepted" && updatedTrip.driverId) {
+            const driver = updatedTrip.driverId;
+            const vehicle = updatedTrip.vehicleId;
+            if (driver && vehicle) {
+                const html = (0, email_templates_1.tripAcceptedTemplate)(customerName, updatedTrip._id.toString(), driver.name, vehicle.brand, vehicle.model, vehicle.number || "Unknown", updatedTrip.startLocation, updatedTrip.endLocation, updatedTrip.date.toString(), updatedTrip.price || 0);
+                yield (0, email_1.sendEmail)(customerEmail, "Trip Request Accepted! 🚗", "", html);
+            }
+        }
+        // Handle Trip Processing (for active trips)
         if (data.status === "Processing" && updatedTrip.driverId) {
             const driver = updatedTrip.driverId;
             const vehicle = updatedTrip.vehicleId;
@@ -238,3 +281,11 @@ const updateTripStatus = (id, data) => __awaiter(void 0, void 0, void 0, functio
     return updatedTrip;
 });
 exports.updateTripStatus = updateTripStatus;
+const updateTripLocation = (id, data) => __awaiter(void 0, void 0, void 0, function* () {
+    return trip_model_1.default.findByIdAndUpdate(id, {
+        currentLat: data.currentLat,
+        currentLng: data.currentLng,
+        currentProgress: data.currentProgress
+    }, { new: true }).lean();
+});
+exports.updateTripLocation = updateTripLocation;

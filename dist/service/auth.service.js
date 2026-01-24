@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetPasswordWithOTP = exports.verifyPasswordResetOTP = exports.sendPasswordResetOTP = exports.authenticateUser = void 0;
+exports.changePassword = exports.resetPasswordWithOTP = exports.verifyPasswordResetOTP = exports.sendPasswordResetOTP = exports.authenticateUser = void 0;
 const user_model_1 = __importDefault(require("../model/user.model"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -33,8 +33,8 @@ const authenticateUser = (email, password) => __awaiter(void 0, void 0, void 0, 
         return null;
     }
     else {
-        const accessToken = jsonwebtoken_1.default.sign({ email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, JWT_SECRET, { expiresIn: "15m" });
-        const refreshToken = jsonwebtoken_1.default.sign({ email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, REFRESH_TOKEN_SECRET, { expiresIn: "7d" });
+        const accessToken = jsonwebtoken_1.default.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, JWT_SECRET, { expiresIn: "15m" });
+        const refreshToken = jsonwebtoken_1.default.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, REFRESH_TOKEN_SECRET, { expiresIn: "7d" });
         resetTokenList.add(refreshToken);
         return { accessToken, refreshToken };
     }
@@ -96,3 +96,22 @@ const resetPasswordWithOTP = (email, otp, newPassword) => __awaiter(void 0, void
     return { success: true };
 });
 exports.resetPasswordWithOTP = resetPasswordWithOTP;
+// Change password (for logged-in users)
+const changePassword = (userId, oldPassword, newPassword) => __awaiter(void 0, void 0, void 0, function* () {
+    // Get user with password
+    const user = yield user_model_1.default.findById(userId).select("+password");
+    if (!user) {
+        return { success: false, error: "User not found" };
+    }
+    // Verify old password
+    const isMatch = yield bcryptjs_1.default.compare(oldPassword, user.password);
+    if (!isMatch) {
+        return { success: false, error: "Incorrect current password" };
+    }
+    // Hash new password
+    const hashedPassword = yield bcryptjs_1.default.hash(newPassword, 10);
+    // Update password
+    yield user_model_1.default.findByIdAndUpdate(userId, { password: hashedPassword });
+    return { success: true };
+});
+exports.changePassword = changePassword;

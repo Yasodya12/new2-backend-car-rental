@@ -48,7 +48,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getVehiclesNearby = exports.validateVehicle = exports.updateVehicle = exports.deleteVehicle = exports.getVehicleById = exports.getAllVehicles = exports.saveVehicle = void 0;
 const vehicle_model_1 = __importDefault(require("../model/vehicle.model"));
 const distanceUtils_1 = require("../utils/distanceUtils");
+const pricingUtils_1 = require("../utils/pricingUtils");
 const saveVehicle = (vehicle) => __awaiter(void 0, void 0, void 0, function* () {
+    // Automatically set pricePerKm based on category if not provided
+    if (!vehicle.pricePerKm && vehicle.category) {
+        vehicle.pricePerKm = (0, pricingUtils_1.getPricePerKm)(vehicle.category);
+    }
     return vehicle_model_1.default.create(vehicle);
 });
 exports.saveVehicle = saveVehicle;
@@ -69,7 +74,9 @@ const updateVehicle = (id, vehicle) => __awaiter(void 0, void 0, void 0, functio
 });
 exports.updateVehicle = updateVehicle;
 const validateVehicle = (vehicle) => __awaiter(void 0, void 0, void 0, function* () {
-    if (!vehicle.brand || !vehicle.name || !vehicle.model || !vehicle.year || !vehicle.color || !vehicle.seats || !vehicle.description || !vehicle.image) {
+    if (!vehicle.brand || !vehicle.name || !vehicle.model || !vehicle.year ||
+        !vehicle.color || !vehicle.seats || !vehicle.description || !vehicle.image ||
+        !vehicle.category) {
         return "Please provide all required fields";
     }
     return null;
@@ -80,15 +87,42 @@ const getVehiclesNearby = (lat_1, lng_1, ...args_1) => __awaiter(void 0, [lat_1,
     const allVehicles = yield vehicle_model_1.default.find({ isAvailable: { $ne: false } });
     // Filter by distance using Haversine formula
     let nearbyVehicles = (0, distanceUtils_1.filterByDistance)(allVehicles, lat, lng, radiusKm);
-    // Filter by availability (Busy Check)
+    // Filter by availability (Busy Check & Maintenance Check)
     if (nearbyVehicles.length > 0) {
         const Trip = (yield Promise.resolve().then(() => __importStar(require("../model/trip.model")))).default;
         const vehicleIds = nearbyVehicles.map(v => v._id);
         const queryDate = date ? new Date(date) : new Date();
         const queryEndDate = endDate ? new Date(endDate) : null;
-        // Find conflicting trips
+        // 1. Check for Maintenance Conflicts
+        // We filter out any vehicle where the requested trip overlaps with a maintenance period
+        nearbyVehicles = nearbyVehicles.filter(v => {
+            if (!v.maintenance || v.maintenance.length === 0)
+                return true;
+            // Check if any maintenance period overlaps with the requested trip dates
+            const hasMaintenanceConflict = v.maintenance.some(m => {
+                const maintenanceStart = new Date(m.startDate);
+                const maintenanceEnd = new Date(m.endDate);
+                if (queryEndDate) {
+                    // Extended Trip: Check for date range overlap
+                    // (StartA <= EndB) and (EndA >= StartB)
+                    return (queryDate <= maintenanceEnd && queryEndDate >= maintenanceStart);
+                }
+                else {
+                    // Quick Ride (Instant): Check if current time falls within maintenance
+                    // Just check if queryDate (now) is inside the maintenance window
+                    return (queryDate >= maintenanceStart && queryDate <= maintenanceEnd);
+                }
+            });
+            return !hasMaintenanceConflict; // Keep vehicle if NO conflict
+        });
+        // Re-calculate vehicle IDs after maintenance filtering
+        const availableVehicleIdsAfterMaintenance = nearbyVehicles.map(v => v._id);
+        if (availableVehicleIdsAfterMaintenance.length === 0) {
+            return [];
+        }
+        // 2. Check for Trip Conflicts (Existing Logic)
         const conflictQuery = {
-            vehicleId: { $in: vehicleIds },
+            vehicleId: { $in: availableVehicleIdsAfterMaintenance },
             status: { $nin: ["Completed", "Cancelled", "Rejected"] }
         };
         if (queryEndDate) {

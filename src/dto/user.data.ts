@@ -2,10 +2,10 @@ export interface UserDTO {
     _id?: any,
     name: string,
     email: string,
-    password: string
+    password?: string | null
     role: string
-    nic?: string
-    contactNumber?: string
+    nic?: string | null
+    contactNumber?: string | null
     dateOfBirth?: string | null
     gender?: 'Male' | 'Female' | null
     profileImage?: string | null | undefined

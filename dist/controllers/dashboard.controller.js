@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.checkHealth = exports.getDashboardStats = void 0;
+exports.checkHealth = exports.getDriverDashboard = exports.getCustomerDashboard = exports.getDashboardStats = void 0;
 const dashboard_service_1 = require("../service/dashboard.service");
 const getDashboardStats = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -22,6 +22,38 @@ const getDashboardStats = (req, res) => __awaiter(void 0, void 0, void 0, functi
     }
 });
 exports.getDashboardStats = getDashboardStats;
+const getCustomerDashboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const stats = yield (0, dashboard_service_1.getCustomerDashboardData)(userId);
+        res.status(200).json(stats);
+    }
+    catch (err) {
+        console.error("Customer Dashboard Error:", err);
+        res.status(500).json({ message: "Failed to fetch customer dashboard" });
+    }
+});
+exports.getCustomerDashboard = getCustomerDashboard;
+const getDriverDashboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        if (!userId) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+        const stats = yield (0, dashboard_service_1.getDriverDashboardData)(userId);
+        res.status(200).json(stats);
+    }
+    catch (err) {
+        console.error("Driver Dashboard Error:", err);
+        res.status(500).json({ message: "Failed to fetch driver dashboard" });
+    }
+});
+exports.getDriverDashboard = getDriverDashboard;
 const checkHealth = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         res.status(200).json({ message: "Health check successful" });

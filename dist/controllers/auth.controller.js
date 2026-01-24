@@ -42,7 +42,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetPassword = exports.verifyOTP = exports.requestPasswordResetOTP = exports.authenticateUser = void 0;
+exports.changePassword = exports.resetPassword = exports.verifyOTP = exports.requestPasswordResetOTP = exports.authenticateUser = void 0;
 const authService = __importStar(require("../service/auth.service"));
 const email_1 = require("../utils/email");
 const email_templates_1 = require("../utils/email.templates");
@@ -128,3 +128,33 @@ const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.resetPassword = resetPassword;
+// Change password (authenticated)
+const changePassword = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const { oldPassword, newPassword } = req.body;
+    // req.user is populated by authenticateToken middleware
+    const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+    if (!userId) {
+        return res.status(401).send({ error: "Unauthorized" });
+    }
+    if (!oldPassword || !newPassword) {
+        return res.status(400).send({ error: "Current and new passwords are required" });
+    }
+    if (newPassword.length < 6) {
+        return res.status(400).send({ error: "New password must be at least 6 characters long" });
+    }
+    try {
+        const result = yield authService.changePassword(userId, oldPassword, newPassword);
+        if (result.success) {
+            return res.status(200).send({ message: "Password changed successfully" });
+        }
+        else {
+            return res.status(400).send({ error: result.error || "Failed to change password" });
+        }
+    }
+    catch (error) {
+        console.error("Error changing password:", error);
+        return res.status(500).send({ error: "Failed to change password" });
+    }
+});
+exports.changePassword = changePassword;

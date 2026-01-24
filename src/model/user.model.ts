@@ -10,14 +10,18 @@ const userModel = new mongoose.Schema({
         required: true,
         unique: true
     },
+    googleId: {
+        type: String,
+        unique: true,
+        sparse: true // Allows null/undefined values while still enforcing uniqueness
+    },
     nic: {
         type: String,
-        required: true,
-        unique: true
+        unique: true,
+        sparse: true // Optional for Google users
     },
     contactNumber: {
-        type: String,
-        required: true
+        type: String
     },
     dateOfBirth: {
         type: String
@@ -28,8 +32,7 @@ const userModel = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: true,
-        select: false
+        select: false // Not required for Google users
     },
     role: {
         type: String,

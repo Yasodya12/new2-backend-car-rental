@@ -21,6 +21,9 @@ export const authenticateUser = async (email: string, password: string) => {
     if (!existingUser) {
         return null;
     }
+    if (!existingUser.password) {
+        return null; // Google users don't have passwords
+    }
     const isValidPassword = await bcrypt.compare(password, existingUser.password);
     if (!isValidPassword) {
         return null;
@@ -110,6 +113,10 @@ export const changePassword = async (userId: string, oldPassword: string, newPas
     const user: UserDTO | null = await User.findById(userId).select("+password");
     if (!user) {
         return { success: false, error: "User not found" };
+    }
+
+    if (!user.password) {
+        return { success: false, error: "This account uses Google Sign-In" };
     }
 
     // Verify old password
