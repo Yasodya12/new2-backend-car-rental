@@ -6,7 +6,7 @@ import {
     updateUser,
     updateProfile,
     deleteUser,
-    getAllUsersByRole, getUserByEmail, getDriversNearby, toggleAvailability, approveDriver, saveAdmin, getDriverApprovals
+    getAllUsersByRole, getUserByEmail, getDriversNearby, toggleAvailability, approveDriver, saveAdmin, getDriverApprovals, blockDriver
 } from "../controllers/user.controller";
 import { authenticateToken, authorizeRole } from '../middleware/auth.middleware';
 
@@ -25,5 +25,6 @@ userRoutes.get("/find-by-email/:email", authenticateToken, getUserByEmail)
 userRoutes.get("/drivers/nearby", getDriversNearby)
 userRoutes.patch("/toggle-availability/:id", authenticateToken, toggleAvailability)
 userRoutes.patch("/approve-driver/:id", authenticateToken, authorizeRole('admin'), approveDriver)
+userRoutes.patch("/block-driver", authenticateToken, blockDriver)
 
 export default userRoutes;

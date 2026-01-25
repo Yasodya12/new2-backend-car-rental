@@ -62,11 +62,12 @@ const tripSchema = new mongoose.Schema({
     rating: { type: Number, min: 0, max: 5 },
     rejectionReason: { type: String },
     rejectedDrivers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    isBroadcast: { type: Boolean, default: false },
     createdAt: {
         type: Date,
         default: Date.now
     }
-});
+}, { timestamps: true });
 
 const Trip = mongoose.model("Trip", tripSchema);
 export default Trip;

@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import Message from "./model/message.model";
 import Conversation from "./model/conversation.model";
+import { checkAndReassignPendingTrips } from "./service/trip.services";
 
 dotenv.config();
 
@@ -202,6 +203,12 @@ async function start() {
             console.log(` Change in ${coll}:`, change.operationType, id);
             io.emit(`mongo-change:${coll}`, change);
         });
+
+        // Start Auto-Reassignment Job (runs every 1 minute)
+        setInterval(() => {
+            checkAndReassignPendingTrips();
+        }, 60 * 1000);
+
         server.listen(port, () => {
             console.log(`Server is running at http://localhost:${port}`);
         });

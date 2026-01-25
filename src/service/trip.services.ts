@@ -5,10 +5,29 @@ import { PopulatedTripDTO } from "../dto/populate.trip.data";
 import { sendEmail } from "../utils/email";
 import { tripAcceptedTemplate, tripCancelledTemplate, tripCompletedTemplate } from "../utils/email.templates";
 import { calculateTripPrice } from "../utils/pricingUtils";
+import { getDriversNearby } from "./user.service";
+import { createNotification } from "./notification.service";
 
 export const getTripsByDriverId = async (driverId: string): Promise<PopulatedTripDTO[]> => {
-    console.log("driverId", driverId);
-    const trips = await Trip.find({ driverId })
+    console.log("Checking trips for Driver:", driverId);
+
+    // Debug: Check count of broadcast trips in general
+    const broadcastCount = await Trip.countDocuments({ isBroadcast: true, status: "Pending" });
+    console.log(`Total Pending Broadcast Trips in DB: ${broadcastCount}`);
+
+    const query = {
+        $or: [
+            { driverId: driverId },
+            {
+                isBroadcast: true,
+                rejectedDrivers: { $ne: driverId },
+                status: "Pending"
+            }
+        ]
+    };
+    // console.log("Query:", JSON.stringify(query));
+
+    const trips = await Trip.find(query)
         .populate("driverId", "_id name email averageRating totalRatings experience provincesVisited")
         .populate("vehicleId", "_id brand model name category pricePerKm")
         .populate("customerId", "_id name email")
@@ -110,6 +129,12 @@ export const validateTrip = async (trip: TripDTO): Promise<string | null> => {
             {
                 status: "Processing",
                 endDate: { $exists: false }
+            },
+            // Accepted Quick Rides also block immediately
+            {
+                status: "Accepted",
+                tripType: "Instant",
+                endDate: { $exists: false }
             }
         ];
 
@@ -177,7 +202,26 @@ export const validateTrip = async (trip: TripDTO): Promise<string | null> => {
     return null;
 }
 
-export const updateTripStatus = async (id: string, data: TripStatusDTO) => {
+export const updateTripStatus = async (id: string, data: TripStatusDTO, actingUserId?: string) => {
+    // Fetch trip first to handle Broadcast logic
+    const tripToUpdate = await Trip.findById(id);
+
+    if (tripToUpdate && tripToUpdate.isBroadcast && data.status === "Accepted") {
+        if (!actingUserId) {
+            throw new Error("User ID required to accept broadcast trip");
+        }
+
+        // Race Condition Check
+        if (tripToUpdate.driverId) {
+            throw new Error("Trip already accepted by another driver");
+        }
+
+        // Assign Driver
+        tripToUpdate.driverId = actingUserId as any;
+        tripToUpdate.isBroadcast = false;
+        await tripToUpdate.save();
+    }
+
     const updatedTrip = await Trip.findByIdAndUpdate(id, { status: data.status }, { new: true })
         .populate("driverId")
         .populate("customerId")
@@ -191,9 +235,49 @@ export const updateTripStatus = async (id: string, data: TripStatusDTO) => {
 
 
         // Handle Trip Accepted (for Extended Trips or confirmed bookings)
-        if (data.status === "Accepted" && updatedTrip.driverId) {
+        if ((data.status === "Accepted" || data.status === "Processing") && updatedTrip.driverId) {
             const driver = updatedTrip.driverId as any;
             const vehicle = updatedTrip.vehicleId as any;
+
+            // --- AUTO-DECLINE OVERLAPPING QUICK RIDES ---
+            // If this is an Instant trip, find other pending instant trips for this driver and "decline" them
+            if (updatedTrip.tripType === "Instant") {
+                const driverId = driver._id?.toString() || driver.toString();
+
+                // Find other pending instant trips for this same driver
+                const collidingTrips = await Trip.find({
+                    _id: { $ne: id },
+                    driverId: driverId,
+                    status: "Pending",
+                    tripType: "Instant"
+                });
+
+                for (const collidingTrip of collidingTrips) {
+                    console.log(`Auto-declining colliding trip ${collidingTrip._id} for driver ${driverId}`);
+
+                    collidingTrip.status = "Rejected";
+                    collidingTrip.rejectionReason = "Driver accepted another job";
+
+                    if (!collidingTrip.rejectedDrivers) collidingTrip.rejectedDrivers = [];
+                    if (!collidingTrip.rejectedDrivers.includes(driverId as any)) {
+                        collidingTrip.rejectedDrivers.push(driverId as any);
+                    }
+
+                    await collidingTrip.save();
+
+                    // Notify customer
+                    if (collidingTrip.customerId) {
+                        await createNotification(
+                            collidingTrip.customerId.toString(),
+                            "Driver Unavailable",
+                            `The driver has accepted another trip. Please click here to select a new driver for your trip from ${collidingTrip.startLocation}.`,
+                            "Warning",
+                            `/trips?reassign=${collidingTrip._id}`
+                        );
+                    }
+                }
+            }
+            // ----------------------------------------------
 
             if (driver && vehicle) {
                 const html = tripAcceptedTemplate(
@@ -307,4 +391,120 @@ export const updateTripLocation = async (id: string, data: { currentLat: number,
         currentLng: data.currentLng,
         currentProgress: data.currentProgress
     }, { new: true }).lean();
+};
+
+export const checkAndReassignPendingTrips = async () => {
+    try {
+        console.log("Running Auto-Reassignment Job...");
+        // 1. Find trips pending for more than 1 minute (Reduced for testing)
+        // const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const fiveMinutesAgo = new Date(Date.now() - 1 * 60 * 1000);
+
+        const pendingTrips = await Trip.find({
+            status: "Pending",
+            tripType: "Instant", // Only auto-reassign Quick Rides
+            isBroadcast: { $ne: true }, // Only broadcast trips that are currently assigned to a specific driver
+            updatedAt: { $lt: fiveMinutesAgo }
+        }).populate("driverId");
+
+        if (pendingTrips.length > 0) {
+            console.log(`Found ${pendingTrips.length} pending trips to reassign.`);
+        }
+
+        for (const trip of pendingTrips) {
+            console.log(`Processing Trip ${trip._id}: Current Driver ${trip.driverId?._id}`);
+
+            // 2. Blacklist current driver
+            const currentDriverId = trip.driverId?._id;
+            if (currentDriverId) {
+                if (!trip.rejectedDrivers) trip.rejectedDrivers = [];
+                // Avoid duplicates
+                if (!trip.rejectedDrivers.includes(currentDriverId)) {
+                    trip.rejectedDrivers.push(currentDriverId);
+                }
+            }
+
+            // 3. Find candidates
+            const nearbyDrivers = await getDriversNearby(
+                trip.startLat || 0,
+                trip.startLng || 0,
+                10,
+                trip.date,
+                trip.endDate || undefined,
+                trip.customerId?._id?.toString() || trip.customerId?.toString()
+            );
+
+            // 4. Filter out rejected/blacklisted drivers
+            const candidates = nearbyDrivers.filter(d => {
+                const dId = d._id?.toString();
+                // Check against blacklist
+                const isBlacklisted = trip.rejectedDrivers.some(rd => rd.toString() === dId);
+                const isCurrent = dId === currentDriverId?.toString();
+                return !isBlacklisted && !isCurrent;
+            });
+
+            if (candidates.length > 0) {
+                // BROADCAST MODE: Market Place Logic
+                // Instead of assigning to one, we open it up to ALL.
+
+                console.log(`Broadcasting Trip ${trip._id} to ${candidates.length} drivers.`);
+
+                // 5. Update Trip to Broadcast Mode
+                trip.driverId = null as any; // Unassign current driver
+                trip.isBroadcast = true;     // Enable Marketplace
+                trip.status = "Pending";     // Keep as Pending
+                await trip.save();
+
+                // 6. Notify ALL Candidates
+                for (const candidate of candidates) {
+                    if (candidate._id) {
+                        await createNotification(
+                            candidate._id.toString(),
+                            "New Trip Available (Marketplace)",
+                            `A trip is available nearby: ${trip.startLocation} to ${trip.endLocation}. First to accept gets it!`,
+                            "Info",
+                            `/trips/${trip._id}`
+                        );
+                    }
+                }
+
+                // Notify Old Driver (that they missed it)
+                if (currentDriverId) {
+                    await createNotification(
+                        currentDriverId.toString(),
+                        "Trip Missed",
+                        `You did not accept the trip in time. It is now open to other drivers.`,
+                        "Warning",
+                        `/trips`
+                    );
+                }
+
+                // Notify Customer
+                if (trip.customerId) {
+                    await createNotification(
+                        trip.customerId.toString(),
+                        "Searching for Drivers...",
+                        `We have broadcasted your trip to ${candidates.length} drivers nearby.`,
+                        "Info",
+                        `/trips/${trip._id}`
+                    );
+                }
+
+            } else {
+                console.log(`No available drivers found for Trip ${trip._id} to broadcast.`);
+                // Notify Customer
+                if (trip.customerId) {
+                    await createNotification(
+                        trip.customerId.toString(),
+                        "No Drivers Found",
+                        `We could not find any available drivers right now. Please try again later.`,
+                        "Error",
+                        `/trips/${trip._id}`
+                    );
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Error in Auto-Reassignment Job:", error);
+    }
 };

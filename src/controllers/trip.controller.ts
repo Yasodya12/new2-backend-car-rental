@@ -19,7 +19,8 @@ export const updateTripStatus = async (
             return res.status(400).send({ error: "Status is required" });
         }
 
-        const updatedTrip: any = await updateTripStatusService(id, { status });
+        const userId = (req as any).user?.id; // Get acting user
+        const updatedTrip: any = await updateTripStatusService(id, { status }, userId);
         if (!updatedTrip) {
             return res.status(404).send({ error: "Trip not found" });
         }
@@ -126,7 +127,12 @@ export const getAllTrips = async (req: Request, res: Response) => {
         let filter = {};
 
         if (user && user.role === "driver") {
-            filter = { driverId: user.id };
+            filter = {
+                $or: [
+                    { driverId: user.id },
+                    { isBroadcast: true, status: "Pending" }
+                ]
+            };
         } else if (user && user.role === "customer") {
             filter = { customerId: user.id };
         }
@@ -155,6 +161,7 @@ export const getTripById = async (req: Request, res: Response) => {
 export const saveTrip = async (req: Request, res: Response) => {
     try {
         const trip = req.body;
+        console.log("Saving New Trip. Payload:", JSON.stringify(trip));
         const validationError = await tripService.validateTrip(trip);
         if (validationError) {
             return res.status(400).send({ error: validationError });

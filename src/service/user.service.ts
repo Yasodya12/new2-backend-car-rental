@@ -165,7 +165,7 @@ export const getAllUsersByRole = async (role: string, includeUnapproved: boolean
     return User.find({ role });
 }
 
-export const getDriversNearby = async (lat: number, lng: number, radiusKm: number = 5, date?: string | Date, endDate?: string | Date): Promise<UserDTO[]> => {
+export const getDriversNearby = async (lat: number, lng: number, radiusKm: number = 5, date?: string | Date, endDate?: string | Date, customerId?: string): Promise<UserDTO[]> => {
     // Get all drivers first (only available and approved ones)
     const allDrivers = await User.find({ role: "driver", isAvailable: { $ne: false }, isApproved: true });
 
@@ -173,6 +173,15 @@ export const getDriversNearby = async (lat: number, lng: number, radiusKm: numbe
     let availableDrivers = (isNaN(lat) || isNaN(lng))
         ? allDrivers
         : filterByDistance(allDrivers, lat, lng, radiusKm);
+
+    // If customerId is provided, filter out blocked drivers
+    if (customerId) {
+        const customer = await User.findById(customerId);
+        if (customer && customer.blockedDrivers && customer.blockedDrivers.length > 0) {
+            const blockedSet = new Set(customer.blockedDrivers.map(id => id.toString()));
+            availableDrivers = availableDrivers.filter(d => !blockedSet.has(d._id?.toString()));
+        }
+    }
 
     // Filter by availability (Busy Check)
     if (availableDrivers.length > 0) {
@@ -217,6 +226,7 @@ export const getDriversNearby = async (lat: number, lng: number, radiusKm: numbe
             // If Scheduled trip covers "now", they are busy.
             conflictQuery.$or = [
                 { status: "Processing" },
+                { status: "Accepted", tripType: "Instant" },
                 {
                     date: { $lte: queryDate },
                     endDate: { $gte: queryDate }
@@ -322,4 +332,20 @@ export const getDriverApprovals = async (): Promise<any[]> => {
     }));
 
     return results;
+}
+
+export const blockDriver = async (userId: string, driverId: string): Promise<UserDTO | null> => {
+    // 1. Validate if driver exists
+    const driver = await User.findById(driverId);
+    if (!driver || driver.role !== "driver") {
+        throw new Error("Invalid driver ID");
+    }
+
+    // 2. Add to blockedDrivers list set (addToSet prevents duplicates)
+    // We update the CUSTOMER'S profile
+    const updatedUser = await User.findByIdAndUpdate(userId, {
+        $addToSet: { blockedDrivers: driverId }
+    }, { new: true });
+
+    return updatedUser;
 }

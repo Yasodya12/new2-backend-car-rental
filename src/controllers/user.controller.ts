@@ -167,10 +167,11 @@ export const getDriversNearby = async (req: Request, res: Response) => {
 
         const date = req.query.date as string;
         const endDate = req.query.endDate as string;
+        const customerId = req.query.customerId as string; // Optional: for exclusion
 
         // If coordinates are provided, perform distance-based search
         // Otherwise, return all available/non-busy drivers
-        const drivers = await userService.getDriversNearby(lat, lng, radius, date, endDate);
+        const drivers = await userService.getDriversNearby(lat, lng, radius, date, endDate, customerId);
         return res.status(200).send(drivers);
     } catch (error: any) {
         return res.status(400).send({ error: error.message || "Approval failed" });
@@ -272,6 +273,26 @@ export const saveAdmin = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Error creating admin:", error);
         return res.status(500).send({ error: "Failed to create administrator" });
+    }
+}
+
+export const blockDriver = async (req: AuthRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+        const { driverId } = req.body;
+
+        if (!userId) {
+            return res.status(401).send({ error: "Unauthorized" });
+        }
+
+        if (!driverId) {
+            return res.status(400).send({ error: "Driver ID is required" });
+        }
+
+        const updatedUser = await userService.blockDriver(userId, driverId);
+        return res.status(200).send(updatedUser);
+    } catch (error: any) {
+        return res.status(400).send({ error: error.message || "Failed to block driver" });
     }
 }
 
