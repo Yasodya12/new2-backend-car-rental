@@ -178,11 +178,14 @@ io.on("connection", (socket) => {
 async function start() {
     try {
         const result = await DBConnection();
-        console.log(result);
+        console.log("✅", result);
 
-        const db = mongoose.connection.db!;
+        const db = mongoose.connection.db;
+        if (!db) {
+            throw new Error("❌ Database connection object is undefined");
+        }
 
-        console.log("Connected to MongoDB DB:", db.databaseName);
+        console.log("🛰️ Connected to MongoDB DB:", db.databaseName);
 
         const pipeline = [
             {
@@ -200,7 +203,7 @@ async function start() {
             const coll = change.ns.coll;
             const id = change.documentKey._id?.toString?.();
 
-            console.log(` Change in ${coll}:`, change.operationType, id);
+            console.log(`📡 Change in ${coll}:`, change.operationType, id);
             io.emit(`mongo-change:${coll}`, change);
         });
 
@@ -210,10 +213,10 @@ async function start() {
         }, 60 * 1000);
 
         server.listen(port, () => {
-            console.log(`Server is running at http://localhost:${port}`);
+            console.log(`🚀 Server is running at http://localhost:${port}`);
         });
     } catch (err) {
-        console.error(" Failed to start server:", err);
+        console.error("❌ Failed to start server:", err);
         process.exit(1);
     }
 }
