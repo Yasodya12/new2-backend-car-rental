@@ -113,6 +113,25 @@ export const getAllUser = async (req: Request, res: Response) => {
     }
 }
 
+export const getCategorizedUsers = async (req: Request, res: Response) => {
+    try {
+        const users = await userService.getAllUser();
+
+        const admins = users.filter(u => u.role === 'admin');
+        const customers = users.filter(u => u.role === 'customer');
+        const drivers = users.filter(u => u.role === 'driver');
+
+        return res.status(200).send({
+            admins: { users: admins, count: admins.length },
+            customers: { users: customers, count: customers.length },
+            drivers: { users: drivers, count: drivers.length },
+            total: users.length
+        });
+    } catch (error: any) {
+        return res.status(400).send({ error: error.message || "Failed to fetch categorized users" });
+    }
+}
+
 import { AuthRequest } from "../types/common.types";
 
 export const getAllUsersByRole = async (req: AuthRequest, res: Response) => {

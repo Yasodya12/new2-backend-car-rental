@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
     getAllUser,
+    getCategorizedUsers,
     saveUser,
     getUserById,
     updateUser,
@@ -13,6 +14,7 @@ import { authenticateToken, authorizeRole } from '../middleware/auth.middleware'
 const userRoutes: Router = Router();
 
 userRoutes.get("/all", authenticateToken, authorizeRole('admin'), getAllUser)
+userRoutes.get("/categorized", authenticateToken, authorizeRole('admin'), getCategorizedUsers)
 userRoutes.post("/register", saveUser)
 userRoutes.post("/admin-create", authenticateToken, authorizeRole('admin'), saveAdmin)
 userRoutes.get("/find/:id", authenticateToken, authorizeRole('admin'), getUserById)
