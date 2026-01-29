@@ -18,6 +18,11 @@ export const saveRating = async (ratingData: RatingDTO) => {
         totalRatings: totalRatings
     });
 
+    // Update the Trip with the rating
+    await Trip.findByIdAndUpdate(ratingData.tripId, {
+        rating: ratingData.rating
+    });
+
     return rating;
 };
 

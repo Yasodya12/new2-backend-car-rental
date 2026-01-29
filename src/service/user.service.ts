@@ -165,14 +165,22 @@ export const getAllUsersByRole = async (role: string, includeUnapproved: boolean
     return User.find({ role });
 }
 
-export const getDriversNearby = async (lat: number, lng: number, radiusKm: number = 5, date?: string | Date, endDate?: string | Date, customerId?: string): Promise<UserDTO[]> => {
+export const getDriversNearby = async (lat: number, lng: number, radiusKm: number = 5, date?: string | Date, endDate?: string | Date, customerId?: string, endLat: number = NaN, endLng: number = NaN, startDistrict?: string, endDistrict?: string): Promise<UserDTO[]> => {
     // Get all drivers first (only available and approved ones)
     const allDrivers = await User.find({ role: "driver", isAvailable: { $ne: false }, isApproved: true });
 
-    // Filter by distance using Haversine formula (only if coordinates are valid)
-    let availableDrivers = (isNaN(lat) || isNaN(lng))
-        ? allDrivers
-        : filterByDistance(allDrivers, lat, lng, radiusKm);
+    let availableDrivers: UserDTO[] = [];
+    const isStartValid = !isNaN(lat) && !isNaN(lng);
+    const isEndValid = !isNaN(endLat) && !isNaN(endLng);
+
+    if (!isStartValid) {
+        availableDrivers = allDrivers;
+    } else {
+        // Only search near start location as per user request (fix for bug where end location drivers were shown)
+        availableDrivers = filterByDistance(allDrivers, lat, lng, radiusKm);
+    }
+
+
 
     // If customerId is provided, filter out blocked drivers
     if (customerId) {
@@ -238,6 +246,46 @@ export const getDriversNearby = async (lat: number, lng: number, radiusKm: numbe
         const busyDriverIds = new Set(busyTrips.map(t => t.driverId?.toString()));
 
         availableDrivers = availableDrivers.filter(d => !busyDriverIds.has(d._id?.toString()));
+    }
+
+    // --- Route Specific Trip Count Logic ---
+    if (startDistrict && endDistrict && availableDrivers.length > 0) {
+        const Trip = (await import("../model/trip.model")).default;
+        const finalDriverIds = availableDrivers.map(d => d._id);
+
+        // Case-insensitive regex for exact district match within the address
+        const startRegex = new RegExp(startDistrict, 'i');
+        const endRegex = new RegExp(endDistrict, 'i');
+
+        const routeTripCounts = await Trip.aggregate([
+            {
+                $match: {
+                    driverId: { $in: finalDriverIds },
+                    status: { $in: ["Completed", "Paid"] },
+                    startLocation: { $regex: startRegex },
+                    endLocation: { $regex: endRegex }
+                }
+            },
+            {
+                $group: {
+                    _id: "$driverId",
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+
+        // Create a map for quick lookup
+        const countMap = new Map<string, number>();
+        routeTripCounts.forEach(item => {
+            countMap.set(item._id.toString(), item.count);
+        });
+
+        // Return plain objects with the new property attached
+        return availableDrivers.map(driver => {
+            const driverObj = (driver as any).toObject ? (driver as any).toObject() : { ...driver };
+            driverObj.routeTripCount = countMap.get(driver._id?.toString() || "") || 0;
+            return driverObj;
+        });
     }
 
     return availableDrivers;

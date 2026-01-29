@@ -165,13 +165,19 @@ export const getDriversNearby = async (req: Request, res: Response) => {
         const lng = req.query.lng ? parseFloat(req.query.lng as string) : NaN;
         const radius = parseFloat(req.query.radius as string) || 5;
 
+        const endLat = req.query.endLat ? parseFloat(req.query.endLat as string) : NaN;
+        const endLng = req.query.endLng ? parseFloat(req.query.endLng as string) : NaN;
+
         const date = req.query.date as string;
         const endDate = req.query.endDate as string;
         const customerId = req.query.customerId as string; // Optional: for exclusion
 
+        const startDistrict = req.query.startDistrict as string;
+        const endDistrict = req.query.endDistrict as string;
+
         // If coordinates are provided, perform distance-based search
         // Otherwise, return all available/non-busy drivers
-        const drivers = await userService.getDriversNearby(lat, lng, radius, date, endDate, customerId);
+        const drivers = await userService.getDriversNearby(lat, lng, radius, date, endDate, customerId, endLat, endLng, startDistrict, endDistrict);
         return res.status(200).send(drivers);
     } catch (error: any) {
         return res.status(400).send({ error: error.message || "Approval failed" });
