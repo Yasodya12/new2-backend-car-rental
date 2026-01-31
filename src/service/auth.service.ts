@@ -8,6 +8,8 @@ dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET as string;
+const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || "15m";
+const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || "7d";
 
 const resetTokenList = new Set<string>();
 
@@ -28,8 +30,8 @@ export const authenticateUser = async (email: string, password: string) => {
     if (!isValidPassword) {
         return null;
     } else {
-        const accessToken = jwt.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, JWT_SECRET, { expiresIn: "15m" });
-        const refreshToken = jwt.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, REFRESH_TOKEN_SECRET, { expiresIn: "7d" });
+        const accessToken = jwt.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY as any });
+        const refreshToken = jwt.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, REFRESH_TOKEN_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY as any });
         resetTokenList.add(refreshToken);
         return { accessToken, refreshToken };
     }

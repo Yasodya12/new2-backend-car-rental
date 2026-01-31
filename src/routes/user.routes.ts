@@ -27,6 +27,6 @@ userRoutes.get("/find-by-email/:email", authenticateToken, getUserByEmail)
 userRoutes.get("/drivers/nearby", getDriversNearby)
 userRoutes.patch("/toggle-availability/:id", authenticateToken, toggleAvailability)
 userRoutes.patch("/approve-driver/:id", authenticateToken, authorizeRole('admin'), approveDriver)
-userRoutes.patch("/block-driver", authenticateToken, blockDriver)
+userRoutes.patch("/block-driver", authenticateToken, authorizeRole('admin'), blockDriver)
 
 export default userRoutes;

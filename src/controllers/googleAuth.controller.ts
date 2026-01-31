@@ -9,6 +9,8 @@ dotenv.config();
 const GOOGLE_CLIENT_ID = '305956686069-ogedh312p79n405acsrad4iqg76q9ki5.apps.googleusercontent.com';
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET as string;
+const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || "15m";
+const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || "7d";
 
 const client = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -82,7 +84,7 @@ export const googleLogin = async (req: Request, res: Response) => {
                 profileImage: user.profileImage
             },
             JWT_SECRET,
-            { expiresIn: "15m" }
+            { expiresIn: ACCESS_TOKEN_EXPIRY as any }
         );
 
         const refreshToken = jwt.sign(
@@ -94,7 +96,7 @@ export const googleLogin = async (req: Request, res: Response) => {
                 profileImage: user.profileImage
             },
             REFRESH_TOKEN_SECRET,
-            { expiresIn: "7d" }
+            { expiresIn: REFRESH_TOKEN_EXPIRY as any }
         );
 
         // Check if profile is incomplete (missing NIC or contactNumber)
