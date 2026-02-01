@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRatingByTripId = exports.getRatingsByDriverId = exports.saveRating = void 0;
 const rating_model_1 = __importDefault(require("../model/rating.model"));
 const user_model_1 = __importDefault(require("../model/user.model"));
+const trip_model_1 = __importDefault(require("../model/trip.model"));
 const saveRating = (ratingData) => __awaiter(void 0, void 0, void 0, function* () {
     // Save the rating
     const rating = yield rating_model_1.default.create(ratingData);
@@ -26,6 +27,10 @@ const saveRating = (ratingData) => __awaiter(void 0, void 0, void 0, function* (
     yield user_model_1.default.findByIdAndUpdate(ratingData.driverId, {
         averageRating: Math.round(averageRating * 10) / 10, // Round to 1 decimal
         totalRatings: totalRatings
+    });
+    // Update the Trip with the rating
+    yield trip_model_1.default.findByIdAndUpdate(ratingData.tripId, {
+        rating: ratingData.rating
     });
     return rating;
 });

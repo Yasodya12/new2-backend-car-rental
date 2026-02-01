@@ -17,6 +17,7 @@ const trip_model_1 = __importDefault(require("../model/trip.model"));
 const booking_model_1 = __importDefault(require("../model/booking.model"));
 const user_model_1 = __importDefault(require("../model/user.model"));
 const vehicle_model_1 = __importDefault(require("../model/vehicle.model"));
+const mongoose_1 = __importDefault(require("mongoose"));
 const getDashboardData = () => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     const totalTrips = yield trip_model_1.default.countDocuments();
@@ -64,6 +65,7 @@ const getDashboardData = () => __awaiter(void 0, void 0, void 0, function* () {
 });
 exports.getDashboardData = getDashboardData;
 const getCustomerDashboardData = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    const userObjectId = new mongoose_1.default.Types.ObjectId(userId);
     // Get all trips for this customer
     const trips = yield trip_model_1.default.find({ customerId: userId }).populate('driverId vehicleId').sort({ createdAt: -1 });
     const totalTrips = trips.length;
@@ -78,9 +80,9 @@ const getCustomerDashboardData = (userId) => __awaiter(void 0, void 0, void 0, f
     const avgTripCost = completedTrips > 0 ? totalSpent / completedTrips : 0;
     // Get recent trips (last 5)
     const recentTrips = trips.slice(0, 5);
-    // Calculate monthly spending (last 6 months)
-    const monthlySpending = yield trip_model_1.default.aggregate([
-        { $match: { customerId: userId, status: 'Completed' } },
+    // Calculate yearly spending (last 12 months)
+    const yearlySpending = yield trip_model_1.default.aggregate([
+        { $match: { customerId: userObjectId, status: 'Completed' } },
         {
             $group: {
                 _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
@@ -88,11 +90,68 @@ const getCustomerDashboardData = (userId) => __awaiter(void 0, void 0, void 0, f
             }
         },
         { $sort: { _id: -1 } },
-        { $limit: 6 }
+        { $limit: 12 }
+    ]);
+    // Calculate monthly spending (Daily breakdown for last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const monthlySpending = yield trip_model_1.default.aggregate([
+        {
+            $match: {
+                customerId: userObjectId,
+                status: 'Completed',
+                createdAt: { $gte: thirtyDaysAgo }
+            }
+        },
+        {
+            $group: {
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                spending: { $sum: "$price" }
+            }
+        },
+        { $sort: { _id: -1 } }
+    ]);
+    // Calculate daily spending (Hourly breakdown for today)
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const hourlySpending = yield trip_model_1.default.aggregate([
+        {
+            $match: {
+                customerId: userObjectId,
+                status: 'Completed',
+                createdAt: { $gte: startOfToday }
+            }
+        },
+        {
+            $group: {
+                _id: { $hour: "$createdAt" },
+                spending: { $sum: "$price" }
+            }
+        },
+        { $sort: { _id: 1 } } // Sort by hour ascending (0-23)
+    ]);
+    // Calculate weekly spending (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const weeklySpending = yield trip_model_1.default.aggregate([
+        {
+            $match: {
+                customerId: userObjectId,
+                status: 'Completed',
+                createdAt: { $gte: sevenDaysAgo }
+            }
+        },
+        {
+            $group: {
+                _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+                spending: { $sum: "$price" }
+            }
+        },
+        { $sort: { _id: -1 } }
     ]);
     // Get favorite destinations (top 3 end locations)
     const favoriteDestinations = yield trip_model_1.default.aggregate([
-        { $match: { customerId: userId, status: 'Completed' } },
+        { $match: { customerId: userObjectId, status: 'Completed' } },
         { $group: { _id: "$endLocation", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 3 }
@@ -109,14 +168,20 @@ const getCustomerDashboardData = (userId) => __awaiter(void 0, void 0, void 0, f
         avgTripCost: Math.round(avgTripCost * 100) / 100,
         activeBookingsCount,
         recentTrips,
+        yearlySpending,
         monthlySpending,
+        weeklySpending,
+        hourlySpending,
         favoriteDestinations: favoriteDestinations.map(d => ({ location: d._id, count: d.count }))
     };
 });
 exports.getCustomerDashboardData = getCustomerDashboardData;
 const getDriverDashboardData = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const userObjectId = new mongoose_1.default.Types.ObjectId(userId);
     // Get all trips for this driver
-    const trips = yield trip_model_1.default.find({ driverId: userId }).populate('customerId vehicleId').sort({ createdAt: -1 });
+    const trips = yield trip_model_1.default.find({ driverId: userObjectId }).populate('customerId vehicleId').sort({ createdAt: -1 });
+    const user = yield user_model_1.default.findById(userObjectId);
     const totalTrips = trips.length;
     const completedTrips = trips.filter(t => t.status === 'Completed').length;
     const cancelledTrips = trips.filter(t => t.status === 'Cancelled').length;
@@ -125,15 +190,16 @@ const getDriverDashboardData = (userId) => __awaiter(void 0, void 0, void 0, fun
         .filter(t => t.status === 'Completed')
         .reduce((sum, t) => sum + (t.price || 0), 0);
     // Calculate average rating
-    const tripsWithRatings = trips.filter(t => t.rating && t.rating > 0);
-    const avgRating = tripsWithRatings.length > 0
-        ? tripsWithRatings.reduce((sum, t) => sum + (t.rating || 0), 0) / tripsWithRatings.length
-        : 0;
+    // const tripsWithRatings = trips.filter(t => t.rating && t.rating > 0);
+    // const avgRating = tripsWithRatings.length > 0
+    //     ? tripsWithRatings.reduce((sum, t) => sum + (t.rating || 0), 0) / tripsWithRatings.length
+    //     : 0;
+    const avgRating = (_a = user === null || user === void 0 ? void 0 : user.averageRating) !== null && _a !== void 0 ? _a : 0;
     // Get recent trips (last 5)
     const recentTrips = trips.slice(0, 5);
     // Calculate monthly earnings (last 6 months)
     const monthlyEarnings = yield trip_model_1.default.aggregate([
-        { $match: { driverId: userId, status: 'Completed' } },
+        { $match: { driverId: userObjectId, status: 'Completed' } },
         {
             $group: {
                 _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
@@ -147,7 +213,7 @@ const getDriverDashboardData = (userId) => __awaiter(void 0, void 0, void 0, fun
     const completionRate = totalTrips > 0 ? (completedTrips / totalTrips) * 100 : 0;
     // Get most frequent routes (top 3)
     const frequentRoutes = yield trip_model_1.default.aggregate([
-        { $match: { driverId: userId, status: 'Completed' } },
+        { $match: { driverId: userObjectId, status: 'Completed' } },
         {
             $group: {
                 _id: { start: "$startLocation", end: "$endLocation" },
@@ -162,7 +228,7 @@ const getDriverDashboardData = (userId) => __awaiter(void 0, void 0, void 0, fun
         completedTrips,
         cancelledTrips,
         totalEarnings: Math.round(totalEarnings * 100) / 100,
-        avgRating: Math.round(avgRating * 10) / 10,
+        avgRating: avgRating,
         completionRate: Math.round(completionRate * 10) / 10,
         recentTrips,
         monthlyEarnings,

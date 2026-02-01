@@ -20,6 +20,8 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 dotenv_1.default.config();
 const JWT_SECRET = process.env.JWT_SECRET;
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET;
+const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || "15m";
+const REFRESH_TOKEN_EXPIRY = process.env.REFRESH_TOKEN_EXPIRY || "7d";
 const resetTokenList = new Set();
 // OTP storage: email -> { otp: string, expiresAt: number }
 const otpStore = new Map();
@@ -28,13 +30,16 @@ const authenticateUser = (email, password) => __awaiter(void 0, void 0, void 0, 
     if (!existingUser) {
         return null;
     }
+    if (!existingUser.password) {
+        return null; // Google users don't have passwords
+    }
     const isValidPassword = yield bcryptjs_1.default.compare(password, existingUser.password);
     if (!isValidPassword) {
         return null;
     }
     else {
-        const accessToken = jsonwebtoken_1.default.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, JWT_SECRET, { expiresIn: "15m" });
-        const refreshToken = jsonwebtoken_1.default.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, REFRESH_TOKEN_SECRET, { expiresIn: "7d" });
+        const accessToken = jsonwebtoken_1.default.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRY });
+        const refreshToken = jsonwebtoken_1.default.sign({ id: existingUser._id, email: existingUser.email, name: existingUser.name, role: existingUser.role, profileImage: existingUser.profileImage }, REFRESH_TOKEN_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
         resetTokenList.add(refreshToken);
         return { accessToken, refreshToken };
     }
@@ -102,6 +107,9 @@ const changePassword = (userId, oldPassword, newPassword) => __awaiter(void 0, v
     const user = yield user_model_1.default.findById(userId).select("+password");
     if (!user) {
         return { success: false, error: "User not found" };
+    }
+    if (!user.password) {
+        return { success: false, error: "This account uses Google Sign-In" };
     }
     // Verify old password
     const isMatch = yield bcryptjs_1.default.compare(oldPassword, user.password);

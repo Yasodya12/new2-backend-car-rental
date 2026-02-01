@@ -21,13 +21,14 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const message_model_1 = __importDefault(require("./model/message.model"));
 const conversation_model_1 = __importDefault(require("./model/conversation.model"));
+const trip_services_1 = require("./service/trip.services");
 dotenv_1.default.config();
 const port = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
 const server = http_1.default.createServer(app_1.default);
 const io = new socket_io_1.Server(server, {
     cors: {
-        origin: ["http://localhost:5173", "http://localhost:3000"],
+        origin: [process.env.CORS_ORIGIN || "http://localhost:5173", "http://localhost:3000"],
         credentials: true,
     },
 });
@@ -157,9 +158,12 @@ function start() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const result = yield (0, DBConnection_1.DBConnection)();
-            console.log(result);
+            console.log("✅", result);
             const db = mongoose_1.default.connection.db;
-            console.log("Connected to MongoDB DB:", db.databaseName);
+            if (!db) {
+                throw new Error("❌ Database connection object is undefined");
+            }
+            console.log("🛰️ Connected to MongoDB DB:", db.databaseName);
             const pipeline = [
                 {
                     $match: {
@@ -174,15 +178,19 @@ function start() {
                     return;
                 const coll = change.ns.coll;
                 const id = (_b = (_a = change.documentKey._id) === null || _a === void 0 ? void 0 : _a.toString) === null || _b === void 0 ? void 0 : _b.call(_a);
-                console.log(` Change in ${coll}:`, change.operationType, id);
+                console.log(`📡 Change in ${coll}:`, change.operationType, id);
                 io.emit(`mongo-change:${coll}`, change);
             });
+            // Start Auto-Reassignment Job (runs every 1 minute)
+            setInterval(() => {
+                (0, trip_services_1.checkAndReassignPendingTrips)();
+            }, 60 * 1000);
             server.listen(port, () => {
-                console.log(`Server is running at http://localhost:${port}`);
+                console.log(`🚀 Server is running at httpss://localhost:${port}`);
             });
         }
         catch (err) {
-            console.error(" Failed to start server:", err);
+            console.error("❌ Failed to start server:", err);
             process.exit(1);
         }
     });

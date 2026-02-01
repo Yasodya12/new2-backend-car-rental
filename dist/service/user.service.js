@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDriverApprovals = exports.approveDriver = exports.toggleAvailability = exports.getDriversNearby = exports.getAllUsersByRole = exports.validateUser = exports.getUserByRole = exports.deleteUser = exports.updateUser = exports.getUserByEmail = exports.getUserById = exports.getAllUser = exports.registerUser = void 0;
+exports.blockDriver = exports.getDriverApprovals = exports.approveDriver = exports.toggleAvailability = exports.getDriversNearby = exports.getAllUsersByRole = exports.validateUser = exports.getUserByRole = exports.deleteUser = exports.updateUser = exports.getUserByEmail = exports.getUserById = exports.getAllUser = exports.registerUser = void 0;
 const user_model_1 = __importDefault(require("../model/user.model"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const distanceUtils_1 = require("../utils/distanceUtils");
@@ -127,13 +127,15 @@ const getUserByRole = (role) => __awaiter(void 0, void 0, void 0, function* () {
 exports.getUserByRole = getUserByRole;
 const validateUser = (user_1, ...args_1) => __awaiter(void 0, [user_1, ...args_1], void 0, function* (user, isUpdate = false) {
     if (isUpdate) {
-        if (!user.name || !user.email || !user.role || !user.nic || !user.contactNumber) {
-            return "Please provide all required fields (Name, Email, Role, NIC, Contact Number)";
+        if (!user.name || !user.email || !user.role) {
+            return "Please provide all required fields (Name, Email, Role)";
         }
     }
     else {
-        if (!user.name || !user.email || !user.password || !user.role || !user.nic || !user.contactNumber) {
-            return "Please provide all required fields (Name, Email, Password, Role, NIC, Contact Number)";
+        // For standard registration (not Google), password is required
+        // But since we use this DTO for Google too, we loosen the check here or handle it in specific controllers
+        if (!user.name || !user.email || !user.role) {
+            return "Please provide all required fields (Name, Email, Role)";
         }
     }
     return null;
@@ -195,13 +197,27 @@ const getAllUsersByRole = (role_1, ...args_1) => __awaiter(void 0, [role_1, ...a
     return user_model_1.default.find({ role });
 });
 exports.getAllUsersByRole = getAllUsersByRole;
-const getDriversNearby = (lat_1, lng_1, ...args_1) => __awaiter(void 0, [lat_1, lng_1, ...args_1], void 0, function* (lat, lng, radiusKm = 5, date, endDate) {
+const getDriversNearby = (lat_1, lng_1, ...args_1) => __awaiter(void 0, [lat_1, lng_1, ...args_1], void 0, function* (lat, lng, radiusKm = 5, date, endDate, customerId, endLat = NaN, endLng = NaN, startDistrict, endDistrict) {
     // Get all drivers first (only available and approved ones)
     const allDrivers = yield user_model_1.default.find({ role: "driver", isAvailable: { $ne: false }, isApproved: true });
-    // Filter by distance using Haversine formula (only if coordinates are valid)
-    let availableDrivers = (isNaN(lat) || isNaN(lng))
-        ? allDrivers
-        : (0, distanceUtils_1.filterByDistance)(allDrivers, lat, lng, radiusKm);
+    let availableDrivers = [];
+    const isStartValid = !isNaN(lat) && !isNaN(lng);
+    const isEndValid = !isNaN(endLat) && !isNaN(endLng);
+    if (!isStartValid) {
+        availableDrivers = allDrivers;
+    }
+    else {
+        // Only search near start location as per user request (fix for bug where end location drivers were shown)
+        availableDrivers = (0, distanceUtils_1.filterByDistance)(allDrivers, lat, lng, radiusKm);
+    }
+    // If customerId is provided, filter out blocked drivers
+    if (customerId) {
+        const customer = yield user_model_1.default.findById(customerId);
+        if (customer && customer.blockedDrivers && customer.blockedDrivers.length > 0) {
+            const blockedSet = new Set(customer.blockedDrivers.map(id => id.toString()));
+            availableDrivers = availableDrivers.filter(d => { var _a; return !blockedSet.has((_a = d._id) === null || _a === void 0 ? void 0 : _a.toString()); });
+        }
+    }
     // Filter by availability (Busy Check)
     if (availableDrivers.length > 0) {
         const Trip = (yield Promise.resolve().then(() => __importStar(require("../model/trip.model")))).default;
@@ -241,6 +257,7 @@ const getDriversNearby = (lat_1, lng_1, ...args_1) => __awaiter(void 0, [lat_1, 
             // If Scheduled trip covers "now", they are busy.
             conflictQuery.$or = [
                 { status: "Processing" },
+                { status: "Accepted", tripType: "Instant" },
                 {
                     date: { $lte: queryDate },
                     endDate: { $gte: queryDate }
@@ -250,6 +267,42 @@ const getDriversNearby = (lat_1, lng_1, ...args_1) => __awaiter(void 0, [lat_1, 
         const busyTrips = yield Trip.find(conflictQuery).select("driverId");
         const busyDriverIds = new Set(busyTrips.map(t => { var _a; return (_a = t.driverId) === null || _a === void 0 ? void 0 : _a.toString(); }));
         availableDrivers = availableDrivers.filter(d => { var _a; return !busyDriverIds.has((_a = d._id) === null || _a === void 0 ? void 0 : _a.toString()); });
+    }
+    // --- Route Specific Trip Count Logic ---
+    if (startDistrict && endDistrict && availableDrivers.length > 0) {
+        const Trip = (yield Promise.resolve().then(() => __importStar(require("../model/trip.model")))).default;
+        const finalDriverIds = availableDrivers.map(d => d._id);
+        // Case-insensitive regex for exact district match within the address
+        const startRegex = new RegExp(startDistrict, 'i');
+        const endRegex = new RegExp(endDistrict, 'i');
+        const routeTripCounts = yield Trip.aggregate([
+            {
+                $match: {
+                    driverId: { $in: finalDriverIds },
+                    status: { $in: ["Completed", "Paid"] },
+                    startLocation: { $regex: startRegex },
+                    endLocation: { $regex: endRegex }
+                }
+            },
+            {
+                $group: {
+                    _id: "$driverId",
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+        // Create a map for quick lookup
+        const countMap = new Map();
+        routeTripCounts.forEach(item => {
+            countMap.set(item._id.toString(), item.count);
+        });
+        // Return plain objects with the new property attached
+        return availableDrivers.map(driver => {
+            var _a;
+            const driverObj = driver.toObject ? driver.toObject() : Object.assign({}, driver);
+            driverObj.routeTripCount = countMap.get(((_a = driver._id) === null || _a === void 0 ? void 0 : _a.toString()) || "") || 0;
+            return driverObj;
+        });
     }
     return availableDrivers;
 });
@@ -320,3 +373,17 @@ const getDriverApprovals = () => __awaiter(void 0, void 0, void 0, function* () 
     return results;
 });
 exports.getDriverApprovals = getDriverApprovals;
+const blockDriver = (userId, driverId) => __awaiter(void 0, void 0, void 0, function* () {
+    // 1. Validate if driver exists
+    const driver = yield user_model_1.default.findById(driverId);
+    if (!driver || driver.role !== "driver") {
+        throw new Error("Invalid driver ID");
+    }
+    // 2. Add to blockedDrivers list set (addToSet prevents duplicates)
+    // We update the CUSTOMER'S profile
+    const updatedUser = yield user_model_1.default.findByIdAndUpdate(userId, {
+        $addToSet: { blockedDrivers: driverId }
+    }, { new: true });
+    return updatedUser;
+});
+exports.blockDriver = blockDriver;

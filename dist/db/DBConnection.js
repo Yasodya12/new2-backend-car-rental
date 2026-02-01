@@ -19,11 +19,16 @@ dotenv_1.default.config();
 const MONGODB_URL = process.env.MONGODB_URL;
 const DBConnection = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const connection = yield mongoose_1.default.connect(MONGODB_URL);
+        console.log("Connecting to MongoDB...");
+        const connection = yield mongoose_1.default.connect(MONGODB_URL, {
+            serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+            connectTimeoutMS: 10000,
+        });
         return `Successfully connected to DB ${connection.connection.host}`;
     }
     catch (error) {
-        return "Mongo Connection Failed !!" + error;
+        console.error("MongoDB Connection Error details:", error);
+        throw error; // Throwing error instead of returning string
     }
 });
 exports.DBConnection = DBConnection;

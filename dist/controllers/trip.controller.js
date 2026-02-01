@@ -52,13 +52,15 @@ const payment_model_1 = __importDefault(require("../model/payment.model"));
 const promotion_model_1 = __importDefault(require("../model/promotion.model"));
 const notification_service_1 = require("../service/notification.service");
 const updateTripStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const id = req.params.id;
         const { status } = req.body;
         if (!status) {
             return res.status(400).send({ error: "Status is required" });
         }
-        const updatedTrip = yield (0, trip_services_1.updateTripStatus)(id, { status });
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id; // Get acting user
+        const updatedTrip = yield (0, trip_services_1.updateTripStatus)(id, { status }, userId);
         if (!updatedTrip) {
             return res.status(404).send({ error: "Trip not found" });
         }
@@ -120,7 +122,12 @@ const getAllTrips = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         const user = req.user;
         let filter = {};
         if (user && user.role === "driver") {
-            filter = { driverId: user.id };
+            filter = {
+                $or: [
+                    { driverId: user.id },
+                    { isBroadcast: true, status: "Pending" }
+                ]
+            };
         }
         else if (user && user.role === "customer") {
             filter = { customerId: user.id };
@@ -151,6 +158,7 @@ exports.getTripById = getTripById;
 const saveTrip = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const trip = req.body;
+        console.log("Saving New Trip. Payload:", JSON.stringify(trip));
         const validationError = yield tripService.validateTrip(trip);
         if (validationError) {
             return res.status(400).send({ error: validationError });

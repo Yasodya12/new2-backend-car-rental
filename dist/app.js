@@ -22,6 +22,7 @@ const ticket_routes_1 = __importDefault(require("./routes/ticket.routes"));
 const driverDocument_routes_1 = __importDefault(require("./routes/driverDocument.routes"));
 const notification_routes_1 = __importDefault(require("./routes/notification.routes"));
 const chat_routes_1 = __importDefault(require("./routes/chat.routes"));
+const demand_routes_1 = __importDefault(require("./routes/demand.routes"));
 // 1. Initialize the express app
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
@@ -52,6 +53,7 @@ app.use("/api/v1/tickets", ticket_routes_1.default);
 app.use("/api/v1/documents", driverDocument_routes_1.default);
 app.use("/api/v1/notifications", auth_middleware_1.authenticateToken, notification_routes_1.default);
 app.use("/api/v1/chat", chat_routes_1.default);
+app.use("/api/v1/demand", auth_middleware_1.authenticateToken, demand_routes_1.default);
 app.use("/uploads/profile", express_1.default.static(path_1.default.join(__dirname, "../public/users")));
 app.use("/uploads/vehicle", express_1.default.static(path_1.default.join(__dirname, "../public/vehicles")));
 exports.default = app;

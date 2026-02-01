@@ -89,7 +89,11 @@ const userModel = new mongoose_1.default.Schema({
     isApproved: {
         type: Boolean,
         default: false
-    }
+    },
+    blockedDrivers: [{
+            type: mongoose_1.default.Schema.Types.ObjectId,
+            ref: 'User'
+        }]
 });
 const User = mongoose_1.default.model('User', userModel);
 exports.default = User;

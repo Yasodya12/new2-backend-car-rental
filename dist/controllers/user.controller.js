@@ -45,7 +45,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.saveAdmin = exports.approveDriver = exports.toggleAvailability = exports.getDriversNearby = exports.getUserByEmail = exports.getDriverApprovals = exports.getAllUsersByRole = exports.getAllUser = exports.getUserById = exports.deleteUser = exports.updateUser = exports.saveUser = void 0;
+exports.blockDriver = exports.saveAdmin = exports.approveDriver = exports.toggleAvailability = exports.getDriversNearby = exports.getUserByEmail = exports.getDriverApprovals = exports.getAllUsersByRole = exports.getCategorizedUsers = exports.getAllUser = exports.getUserById = exports.deleteUser = exports.updateUser = exports.updateProfile = exports.saveUser = void 0;
 const user_model_1 = __importDefault(require("../model/user.model"));
 const userService = __importStar(require("../service/user.service"));
 const email_1 = require("../utils/email");
@@ -73,13 +73,20 @@ const saveUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.saveUser = saveUser;
-const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// Update own profile
+const updateProfile = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
-        const id = req.params.id;
+        const id = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        if (!id) {
+            return res.status(401).send({ error: "Unauthorized" });
+        }
         const user = req.body;
-        const validationError = yield userService.validateUser(user, true);
-        if (validationError) {
-            return res.status(400).send({ error: validationError });
+        // Validate required fields for profile completion
+        if (req.path.includes('profile')) {
+            if (!user.nic || !user.contactNumber) {
+                return res.status(400).send({ error: "NIC and Contact Number are required" });
+            }
         }
         const updatedUser = yield userService.updateUser(id, user);
         if (!updatedUser) {
@@ -88,7 +95,23 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         return res.status(200).send(updatedUser);
     }
     catch (error) {
-        return res.status(400).send({ error: error.message || "Approval failed" });
+        return res.status(400).send({ error: error.message || "Update failed" });
+    }
+});
+exports.updateProfile = updateProfile;
+const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const id = req.params.id;
+        const user = req.body;
+        // Skip validation for simple updates or handle inside service
+        const updatedUser = yield userService.updateUser(id, user);
+        if (!updatedUser) {
+            return res.status(404).send({ error: "User not found" });
+        }
+        return res.status(200).send(updatedUser);
+    }
+    catch (error) {
+        return res.status(400).send({ error: error.message || "Update failed" });
     }
 });
 exports.updateUser = updateUser;
@@ -102,7 +125,7 @@ const deleteUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         return res.status(200).send(deletedUser);
     }
     catch (error) {
-        return res.status(400).send({ error: error.message || "Approval failed" });
+        return res.status(400).send({ error: error.message || "Delete failed" });
     }
 });
 exports.deleteUser = deleteUser;
@@ -130,6 +153,24 @@ const getAllUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.getAllUser = getAllUser;
+const getCategorizedUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const users = yield userService.getAllUser();
+        const admins = users.filter(u => u.role === 'admin');
+        const customers = users.filter(u => u.role === 'customer');
+        const drivers = users.filter(u => u.role === 'driver');
+        return res.status(200).send({
+            admins: { users: admins, count: admins.length },
+            customers: { users: customers, count: customers.length },
+            drivers: { users: drivers, count: drivers.length },
+            total: users.length
+        });
+    }
+    catch (error) {
+        return res.status(400).send({ error: error.message || "Failed to fetch categorized users" });
+    }
+});
+exports.getCategorizedUsers = getCategorizedUsers;
 const getAllUsersByRole = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
@@ -180,11 +221,16 @@ const getDriversNearby = (req, res) => __awaiter(void 0, void 0, void 0, functio
         const lat = req.query.lat ? parseFloat(req.query.lat) : NaN;
         const lng = req.query.lng ? parseFloat(req.query.lng) : NaN;
         const radius = parseFloat(req.query.radius) || 5;
+        const endLat = req.query.endLat ? parseFloat(req.query.endLat) : NaN;
+        const endLng = req.query.endLng ? parseFloat(req.query.endLng) : NaN;
         const date = req.query.date;
         const endDate = req.query.endDate;
+        const customerId = req.query.customerId; // Optional: for exclusion
+        const startDistrict = req.query.startDistrict;
+        const endDistrict = req.query.endDistrict;
         // If coordinates are provided, perform distance-based search
         // Otherwise, return all available/non-busy drivers
-        const drivers = yield userService.getDriversNearby(lat, lng, radius, date, endDate);
+        const drivers = yield userService.getDriversNearby(lat, lng, radius, date, endDate, customerId, endLat, endLng, startDistrict, endDistrict);
         return res.status(200).send(drivers);
     }
     catch (error) {
@@ -273,3 +319,22 @@ const saveAdmin = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.saveAdmin = saveAdmin;
+const blockDriver = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        const { driverId } = req.body;
+        if (!userId) {
+            return res.status(401).send({ error: "Unauthorized" });
+        }
+        if (!driverId) {
+            return res.status(400).send({ error: "Driver ID is required" });
+        }
+        const updatedUser = yield userService.blockDriver(userId, driverId);
+        return res.status(200).send(updatedUser);
+    }
+    catch (error) {
+        return res.status(400).send({ error: error.message || "Failed to block driver" });
+    }
+});
+exports.blockDriver = blockDriver;
