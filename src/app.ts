@@ -17,6 +17,7 @@ import ticketRoutes from "./routes/ticket.routes";
 import documentRoutes from "./routes/driverDocument.routes";
 import notificationRoutes from "./routes/notification.routes";
 import chatRoutes from "./routes/chat.routes";
+import demandRoutes from "./routes/demand.routes";
 
 // 1. Initialize the express app
 const app: Express = express();
@@ -50,6 +51,7 @@ app.use("/api/v1/tickets", ticketRoutes);
 app.use("/api/v1/documents", documentRoutes);
 app.use("/api/v1/notifications", authenticateToken, notificationRoutes);
 app.use("/api/v1/chat", chatRoutes);
+app.use("/api/v1/demand", authenticateToken, demandRoutes);
 app.use("/uploads/profile", express.static(path.join(__dirname, "../public/users")));
 app.use("/uploads/vehicle", express.static(path.join(__dirname, "../public/vehicles")));
 
