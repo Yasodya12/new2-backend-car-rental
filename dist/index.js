@@ -28,7 +28,9 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const server = http_1.default.createServer(app_1.default);
 const io = new socket_io_1.Server(server, {
     cors: {
-        origin: [process.env.CORS_ORIGIN || "http://localhost:5173", "http://localhost:3000"],
+        origin: process.env.CORS_ORIGIN
+            ? [...process.env.CORS_ORIGIN.split(','), "http://localhost:3000"]
+            : ["http://localhost:5173", "http://localhost:3000"],
         credentials: true,
     },
 });

@@ -23,7 +23,7 @@ import demandRoutes from "./routes/demand.routes";
 const app: Express = express();
 
 app.use(express.json());
-const allowedOrigins = ["http://localhost:5173"];
+const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ["http://localhost:5173"];
 
 const crsOptions = {
     origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {

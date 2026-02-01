@@ -26,7 +26,7 @@ const demand_routes_1 = __importDefault(require("./routes/demand.routes"));
 // 1. Initialize the express app
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
-const allowedOrigins = ["http://localhost:5173"];
+const allowedOrigins = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : ["http://localhost:5173"];
 const crsOptions = {
     origin: (origin, callback) => {
         if (!origin || allowedOrigins.includes(origin)) { // postman request allowed

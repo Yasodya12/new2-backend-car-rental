@@ -18,7 +18,9 @@ const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
     cors: {
-        origin: [process.env.CORS_ORIGIN || "http://localhost:5173", "http://localhost:3000"],
+        origin: process.env.CORS_ORIGIN
+            ? [...process.env.CORS_ORIGIN.split(','), "http://localhost:3000"]
+            : ["http://localhost:5173", "http://localhost:3000"],
         credentials: true,
     },
 });
