@@ -213,7 +213,7 @@ async function start() {
         }, 60 * 1000);
 
         server.listen(port, () => {
-            console.log(`🚀 Server is running at http://localhost:${port}`);
+            console.log(`🚀 Server is runnings ats http://localhost:${port}`);
         });
     } catch (err) {
         console.error("❌ Failed to start server:", err);
