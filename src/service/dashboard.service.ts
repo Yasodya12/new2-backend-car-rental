@@ -15,10 +15,25 @@ export const getDashboardData = async () => {
 
     // Revenue Calculation
     const revenueAgg = await Trip.aggregate([
-        { $match: { status: "Completed" } },
-        { $group: { _id: null, totalRevenue: { $sum: "$price" } } }
+        { $match: { status: { $in: ["Completed", "Paid"] } } },
+        {
+            $group: {
+                _id: null,
+                totalRevenue: { $sum: "$price" },
+                totalDriverPayout: {
+                    $sum: {
+                        $cond: [
+                            { $and: [{ $gt: ["$driverFee", 0] }, { $ne: ["$driverFee", null] }] },
+                            "$driverFee",
+                            { $multiply: ["$price", 0.20] }
+                        ]
+                    }
+                }
+            }
+        }
     ]);
     const totalRevenue = revenueAgg[0]?.totalRevenue || 0;
+    const totalDriverPayout = revenueAgg[0]?.totalDriverPayout || 0;
 
     // Promo Discounts
     const promoAgg = await Trip.aggregate([
@@ -46,6 +61,7 @@ export const getDashboardData = async () => {
         totalCustomers,
         totalVehicles,
         totalRevenue,
+        totalDriverPayout,
         totalPromoDiscount,
         topDrivers,
         tripDistribution: tripDistribution
@@ -187,12 +203,21 @@ export const getDriverDashboardData = async (userId: string) => {
     const trips = await Trip.find({ driverId: userObjectId }).populate('customerId vehicleId').sort({ createdAt: -1 });
     const user = await User.findById(userObjectId);
     const totalTrips = trips.length;
-    const completedTrips = trips.filter(t => t.status === 'Completed').length;
+    const completedTrips = trips.filter(t => t.status === 'Completed' || t.status === 'Paid').length;
     const cancelledTrips = trips.filter(t => t.status === 'Cancelled').length;
 
-    // Calculate total earnings
+    // Calculate total earnings (using driverFee if available, else fallback to 20% of price for legacy data)
     const totalEarnings = trips
-        .filter(t => t.status === 'Completed')
+        .filter(t => t.status === 'Completed' || t.status === 'Paid')
+        .reduce((sum, t) => {
+            const fee = (t as any).driverFee !== undefined && (t as any).driverFee >= 0
+                ? (t as any).driverFee
+                : (t.price || 0) * 0.20;
+            return sum + fee;
+        }, 0);
+
+    const totalRevenue = trips
+        .filter(t => t.status === 'Completed' || t.status === 'Paid')
         .reduce((sum, t) => sum + (t.price || 0), 0);
 
     // Calculate average rating
@@ -207,11 +232,20 @@ export const getDriverDashboardData = async (userId: string) => {
 
     // Calculate monthly earnings (last 6 months)
     const monthlyEarnings = await Trip.aggregate([
-        { $match: { driverId: userObjectId, status: 'Completed' } },
+        { $match: { driverId: userObjectId, status: { $in: ['Completed', 'Paid'] } } },
         {
             $group: {
                 _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
-                earnings: { $sum: "$price" }
+                earnings: {
+                    $sum: {
+                        $cond: [
+                            { $and: [{ $gt: ["$driverFee", 0] }, { $ne: ["$driverFee", null] }] },
+                            "$driverFee",
+                            { $multiply: ["$price", 0.20] } // Fallback for legacy trips
+                        ]
+                    }
+                },
+                revenue: { $sum: "$price" }
             }
         },
         { $sort: { _id: -1 } },
@@ -223,7 +257,7 @@ export const getDriverDashboardData = async (userId: string) => {
 
     // Get most frequent routes (top 3)
     const frequentRoutes = await Trip.aggregate([
-        { $match: { driverId: userObjectId, status: 'Completed' } },
+        { $match: { driverId: userObjectId, status: { $in: ['Completed', 'Paid'] } } },
         {
             $group: {
                 _id: { start: "$startLocation", end: "$endLocation" },
@@ -239,10 +273,13 @@ export const getDriverDashboardData = async (userId: string) => {
         completedTrips,
         cancelledTrips,
         totalEarnings: Math.round(totalEarnings * 100) / 100,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        totalFees: Math.round((totalRevenue - totalEarnings) * 100) / 100,
         avgRating: avgRating,
         completionRate: Math.round(completionRate * 10) / 10,
         recentTrips,
         monthlyEarnings,
+        walletBalance: user?.walletBalance || 0,
         frequentRoutes: frequentRoutes.map(r => ({
             route: `${r._id.start} → ${r._id.end}`,
             count: r.count

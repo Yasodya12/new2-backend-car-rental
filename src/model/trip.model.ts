@@ -63,6 +63,7 @@ const tripSchema = new mongoose.Schema({
     rejectionReason: { type: String },
     rejectedDrivers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     isBroadcast: { type: Boolean, default: false },
+    driverFee: { type: Number, default: 0 },
     createdAt: {
         type: Date,
         default: Date.now

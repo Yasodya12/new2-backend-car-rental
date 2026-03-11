@@ -18,6 +18,7 @@ import documentRoutes from "./routes/driverDocument.routes";
 import notificationRoutes from "./routes/notification.routes";
 import chatRoutes from "./routes/chat.routes";
 import demandRoutes from "./routes/demand.routes";
+import withdrawalRoutes from "./routes/withdrawal.routes";
 
 // 1. Initialize the express app
 const app: Express = express();
@@ -52,6 +53,7 @@ app.use("/api/v1/documents", documentRoutes);
 app.use("/api/v1/notifications", authenticateToken, notificationRoutes);
 app.use("/api/v1/chat", chatRoutes);
 app.use("/api/v1/demand", authenticateToken, demandRoutes);
+app.use("/api/v1/withdrawals", withdrawalRoutes);
 app.use("/uploads/profile", express.static(path.join(__dirname, "../public/users")));
 app.use("/uploads/vehicle", express.static(path.join(__dirname, "../public/vehicles")));
 

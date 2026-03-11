@@ -19,7 +19,7 @@ const user_model_1 = __importDefault(require("../model/user.model"));
 const vehicle_model_1 = __importDefault(require("../model/vehicle.model"));
 const mongoose_1 = __importDefault(require("mongoose"));
 const getDashboardData = () => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a, _b, _c;
     const totalTrips = yield trip_model_1.default.countDocuments();
     const completedTrips = yield trip_model_1.default.countDocuments({ status: "Completed" });
     const totalUsers = yield user_model_1.default.countDocuments();
@@ -29,15 +29,30 @@ const getDashboardData = () => __awaiter(void 0, void 0, void 0, function* () {
     const totalBookings = yield booking_model_1.default.countDocuments();
     // Revenue Calculation
     const revenueAgg = yield trip_model_1.default.aggregate([
-        { $match: { status: "Completed" } },
-        { $group: { _id: null, totalRevenue: { $sum: "$price" } } }
+        { $match: { status: { $in: ["Completed", "Paid"] } } },
+        {
+            $group: {
+                _id: null,
+                totalRevenue: { $sum: "$price" },
+                totalDriverPayout: {
+                    $sum: {
+                        $cond: [
+                            { $and: [{ $gt: ["$driverFee", 0] }, { $ne: ["$driverFee", null] }] },
+                            "$driverFee",
+                            { $multiply: ["$price", 0.20] }
+                        ]
+                    }
+                }
+            }
+        }
     ]);
     const totalRevenue = ((_a = revenueAgg[0]) === null || _a === void 0 ? void 0 : _a.totalRevenue) || 0;
+    const totalDriverPayout = ((_b = revenueAgg[0]) === null || _b === void 0 ? void 0 : _b.totalDriverPayout) || 0;
     // Promo Discounts
     const promoAgg = yield trip_model_1.default.aggregate([
         { $group: { _id: null, totalDiscount: { $sum: "$discountAmount" } } }
     ]);
-    const totalPromoDiscount = ((_b = promoAgg[0]) === null || _b === void 0 ? void 0 : _b.totalDiscount) || 0;
+    const totalPromoDiscount = ((_c = promoAgg[0]) === null || _c === void 0 ? void 0 : _c.totalDiscount) || 0;
     // Top Drivers (by average rating)
     const topDrivers = yield user_model_1.default.find({ role: "driver", totalRatings: { $gt: 0 } })
         .sort({ averageRating: -1 })
@@ -56,6 +71,7 @@ const getDashboardData = () => __awaiter(void 0, void 0, void 0, function* () {
         totalCustomers,
         totalVehicles,
         totalRevenue,
+        totalDriverPayout,
         totalPromoDiscount,
         topDrivers,
         tripDistribution: tripDistribution
@@ -183,11 +199,19 @@ const getDriverDashboardData = (userId) => __awaiter(void 0, void 0, void 0, fun
     const trips = yield trip_model_1.default.find({ driverId: userObjectId }).populate('customerId vehicleId').sort({ createdAt: -1 });
     const user = yield user_model_1.default.findById(userObjectId);
     const totalTrips = trips.length;
-    const completedTrips = trips.filter(t => t.status === 'Completed').length;
+    const completedTrips = trips.filter(t => t.status === 'Completed' || t.status === 'Paid').length;
     const cancelledTrips = trips.filter(t => t.status === 'Cancelled').length;
-    // Calculate total earnings
+    // Calculate total earnings (using driverFee if available, else fallback to 20% of price for legacy data)
     const totalEarnings = trips
-        .filter(t => t.status === 'Completed')
+        .filter(t => t.status === 'Completed' || t.status === 'Paid')
+        .reduce((sum, t) => {
+        const fee = t.driverFee !== undefined && t.driverFee >= 0
+            ? t.driverFee
+            : (t.price || 0) * 0.20;
+        return sum + fee;
+    }, 0);
+    const totalRevenue = trips
+        .filter(t => t.status === 'Completed' || t.status === 'Paid')
         .reduce((sum, t) => sum + (t.price || 0), 0);
     // Calculate average rating
     // const tripsWithRatings = trips.filter(t => t.rating && t.rating > 0);
@@ -199,11 +223,20 @@ const getDriverDashboardData = (userId) => __awaiter(void 0, void 0, void 0, fun
     const recentTrips = trips.slice(0, 5);
     // Calculate monthly earnings (last 6 months)
     const monthlyEarnings = yield trip_model_1.default.aggregate([
-        { $match: { driverId: userObjectId, status: 'Completed' } },
+        { $match: { driverId: userObjectId, status: { $in: ['Completed', 'Paid'] } } },
         {
             $group: {
                 _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
-                earnings: { $sum: "$price" }
+                earnings: {
+                    $sum: {
+                        $cond: [
+                            { $and: [{ $gt: ["$driverFee", 0] }, { $ne: ["$driverFee", null] }] },
+                            "$driverFee",
+                            { $multiply: ["$price", 0.20] } // Fallback for legacy trips
+                        ]
+                    }
+                },
+                revenue: { $sum: "$price" }
             }
         },
         { $sort: { _id: -1 } },
@@ -213,7 +246,7 @@ const getDriverDashboardData = (userId) => __awaiter(void 0, void 0, void 0, fun
     const completionRate = totalTrips > 0 ? (completedTrips / totalTrips) * 100 : 0;
     // Get most frequent routes (top 3)
     const frequentRoutes = yield trip_model_1.default.aggregate([
-        { $match: { driverId: userObjectId, status: 'Completed' } },
+        { $match: { driverId: userObjectId, status: { $in: ['Completed', 'Paid'] } } },
         {
             $group: {
                 _id: { start: "$startLocation", end: "$endLocation" },
@@ -228,6 +261,7 @@ const getDriverDashboardData = (userId) => __awaiter(void 0, void 0, void 0, fun
         completedTrips,
         cancelledTrips,
         totalEarnings: Math.round(totalEarnings * 100) / 100,
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
         avgRating: avgRating,
         completionRate: Math.round(completionRate * 10) / 10,
         recentTrips,

@@ -4,7 +4,7 @@ import { TripDTO, TripStatusDTO } from "../dto/trip.data";
 import { PopulatedTripDTO } from "../dto/populate.trip.data";
 import { sendEmail } from "../utils/email";
 import { tripAcceptedTemplate, tripCancelledTemplate, tripCompletedTemplate } from "../utils/email.templates";
-import { calculateTripPrice } from "../utils/pricingUtils";
+import { calculateTripPrice, calculateDriverFee } from "../utils/pricingUtils";
 import { getDriversNearby } from "./user.service";
 import { createNotification } from "./notification.service";
 
@@ -58,8 +58,11 @@ export const saveTrip = async (trip: TripDTO): Promise<TripDTO> => {
             const vehicle = await Vehicle.findById(trip.vehicleId);
             if (vehicle && vehicle.category) {
                 trip.price = calculateTripPrice(distanceKm, vehicle.category);
+                trip.driverFee = calculateDriverFee(trip.price);
             }
         }
+    } else if (trip.price && !trip.driverFee) {
+        trip.driverFee = calculateDriverFee(trip.price);
     }
 
     return Trip.create(trip);
@@ -332,6 +335,13 @@ export const updateTripStatus = async (id: string, data: TripStatusDTO, actingUs
 
         // Handle Trip Completed
         if (data.status === "Completed") {
+            // Ensure driverFee is persisted upon completion
+            if (updatedTrip.price && (!updatedTrip.driverFee || updatedTrip.driverFee === 0)) {
+                const calculatedFee = calculateDriverFee(updatedTrip.price);
+                await Trip.findByIdAndUpdate(id, { driverFee: calculatedFee });
+                (updatedTrip as any).driverFee = calculatedFee;
+            }
+
             const price = updatedTrip.price || 0;
             const html = tripCompletedTemplate(
                 customerName,
@@ -375,7 +385,7 @@ export const updateTripStatus = async (id: string, data: TripStatusDTO, actingUs
                 });
 
                 await User.findByIdAndUpdate(driver._id, {
-                    $inc: { experience: 1 },
+                    $inc: { experience: 1, walletBalance: (updatedTrip as any).driverFee || 0 },
                     $set: { provincesVisited: currentProvinces }
                 });
             }

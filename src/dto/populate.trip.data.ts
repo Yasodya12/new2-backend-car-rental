@@ -1,4 +1,4 @@
-import {ObjectId} from "mongoose";
+import { ObjectId } from "mongoose";
 
 export interface PopulatedTripDTO {
     _id?: ObjectId,
@@ -27,5 +27,17 @@ export interface PopulatedTripDTO {
     price?: number | null,
     notes?: string | null,
     tripType?: "Instant" | "Scheduled",
+    startLat?: number,
+    startLng?: number,
+    endLat?: number,
+    endLng?: number,
+    currentLat?: number,
+    currentLng?: number,
+    currentProgress?: number,
+    isBroadcast?: boolean,
+    rejectedDrivers?: ObjectId[],
+    rejectionReason?: string,
+    rating?: number,
+    driverFee?: number,
     createdAt?: Date
 }

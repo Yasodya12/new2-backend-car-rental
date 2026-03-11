@@ -33,3 +33,11 @@ export const calculateTripPrice = (distanceKm: number, category: string): number
     const pricePerKm = getPricePerKm(category);
     return Math.round(distanceKm * pricePerKm);
 };
+/**
+ * Calculate driver fee based on total trip price
+ * @param price - Total trip price
+ * @returns Driver's share (20% as per current business logic)
+ */
+export const calculateDriverFee = (price: number): number => {
+    return Math.round(price * 0.20 * 100) / 100;
+};

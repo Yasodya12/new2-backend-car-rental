@@ -20,6 +20,11 @@ export interface TripDTO {
     currentLat?: number | null;
     currentLng?: number | null;
     currentProgress?: number | null;
+    driverFee?: number;
+    isBroadcast?: boolean;
+    rejectedDrivers?: Types.ObjectId[];
+    rejectionReason?: string | null;
+    rating?: number | null;
     createdAt?: Date;
 }
 

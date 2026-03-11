@@ -89,7 +89,11 @@ const userModel = new mongoose.Schema({
     blockedDrivers: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
-    }]
+    }],
+    walletBalance: {
+        type: Number,
+        default: 0
+    }
 })
 const User = mongoose.model('User', userModel);
 export default User
