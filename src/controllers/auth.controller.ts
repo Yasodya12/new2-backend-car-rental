@@ -3,6 +3,8 @@ import { AuthRequest } from '../types/common.types';
 import * as authService from '../service/auth.service';
 import { sendEmail } from '../utils/email';
 import { otpEmailTemplate } from '../utils/email.templates';
+import User from '../model/user.model';
+import bcrypt from 'bcryptjs';
 
 export const authenticateUser = async (req: Request, res: Response) => {
     const { email, password } = req.body;
@@ -118,5 +120,71 @@ export const changePassword = async (req: AuthRequest, res: Response) => {
     } catch (error) {
         console.error("Error changing password:", error);
         return res.status(500).send({ error: "Failed to change password" });
+    }
+}
+
+// Emergency: Create admin when database is empty
+export const createEmergencyAdmin = async (req: Request, res: Response) => {
+    try {
+        // Check if any admin already exists
+        const adminExists = await User.findOne({ role: 'admin' });
+        if (adminExists) {
+            return res.status(409).send({ 
+                error: "Admin user already exists. This endpoint can only be used when no admin exists." 
+            });
+        }
+
+        const { name, email, password, contactNumber } = req.body;
+
+        // Validate required fields
+        if (!email || !password || !name) {
+            return res.status(400).send({ 
+                error: "Name, email, and password are required" 
+            });
+        }
+
+        // Validate password strength
+        if (password.length < 8) {
+            return res.status(400).send({ 
+                error: "Password must be at least 8 characters long" 
+            });
+        }
+
+        // Check if email already in use
+        const emailExists = await User.findOne({ email });
+        if (emailExists) {
+            return res.status(400).send({ 
+                error: "Email is already in use" 
+            });
+        }
+
+        // Hash password and create admin
+        const hashedPassword = bcrypt.hashSync(password, 10);
+        
+        const newAdmin = await User.create({
+            name,
+            email,
+            password: hashedPassword,
+            role: 'admin',
+            contactNumber: contactNumber || '',
+            isApproved: true,
+            walletBalance: 0,
+        });
+
+        return res.status(201).send({ 
+            message: "Admin user created successfully",
+            user: {
+                id: newAdmin._id,
+                name: newAdmin.name,
+                email: newAdmin.email,
+                role: newAdmin.role
+            }
+        });
+
+    } catch (error: any) {
+        console.error("Error creating emergency admin:", error);
+        return res.status(500).send({ 
+            error: error.message || "Failed to create admin user" 
+        });
     }
 }
